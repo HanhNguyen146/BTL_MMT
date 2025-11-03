@@ -308,6 +308,24 @@ class HttpAdapter:
                 conn.sendall(headers.encode() + body.encode())
                 conn.close()
                 return
+        # --- Handle GET /peer ---
+        if req.method == "GET" and req.path == "/peer":
+            body = f"<h1>Peer alive at port {self.port}</h1>"
+            headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+            conn.sendall(headers.encode() + body.encode())
+            conn.close()
+            return
+
+        # --- Handle POST /message ---
+        if req.method == "POST" and req.path == "/message":
+            import urllib.parse
+            body = raw_req.split("\r\n\r\n", 1)[1] if "\r\n\r\n" in raw_req else ""
+            print(f"[Peer:{self.port}] received message: {body.strip()}")
+            reply = f"Message received on peer {self.port}"
+            headers = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"
+            conn.sendall(headers.encode() + reply.encode())
+            conn.close()
+            return
 
         # --- 404 Not Found ---
         conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n<h1>404 Not Found</h1>")
