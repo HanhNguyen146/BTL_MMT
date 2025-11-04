@@ -39,7 +39,6 @@ import socket
 import threading
 import argparse
 import re
-from urlparse import urlparse
 from collections import defaultdict
 
 from daemon import create_proxy
@@ -97,7 +96,7 @@ def parse_virtual_hosts(config_file):
             routes[host] = (proxy_map.get(host,[]), dist_policy_map)
 
     for key, value in routes.items():
-        print key, value
+        print(key, value) 
     return routes
 
 

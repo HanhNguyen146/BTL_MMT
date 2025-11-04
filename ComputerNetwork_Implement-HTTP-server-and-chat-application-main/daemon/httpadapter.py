@@ -327,6 +327,22 @@ class HttpAdapter:
             conn.close()
             return
 
-        # --- 404 Not Found ---
-        conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n<h1>404 Not Found</h1>")
-        conn.close()
+        # # --- 404 Not Found ---
+        # conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n<h1>404 Not Found</h1>")
+        # conn.close()
+        # --- Try forwarding to custom app.routes (WeApRous) ---
+        if (req.method, req.path) in routes:
+            handler = routes[(req.method, req.path)]
+            body = req.body or ""
+            headers = req.headers or {}
+            try:
+                if "\r\n\r\n" in raw_req:
+                    body = raw_req.split("\r\n\r\n", 1)[1]
+                resp_body = handler(headers, body)
+                conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" + resp_body.encode())
+            except Exception as e:
+                err = f"{{\"status\":\"error\",\"message\":\"{str(e)}\"}}"
+                conn.sendall(b"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n" + err.encode())
+        else:
+            conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n<h1>404 Not Found</h1>")
+            conn.close()

@@ -1,123 +1,88 @@
+import requests
 import socket
 import threading
-import json
 import time
+import json
 
-TRACKER_IP = "127.0.0.1"
-TRACKER_PORT = 8000
+# ====== cấu hình backend ======
+BACKEND = "http://127.0.0.1:9000"   # đổi port nếu backend dùng cổng khác
 
-# ======== Tracker Server ============
-class TrackerServer:
-    def __init__(self, ip=TRACKER_IP, port=TRACKER_PORT):
-        self.ip = ip
-        self.port = port
-        self.peers = {}  # {peer_id: (ip, port)}
+# ====== peer listener (để nhận tin nhắn từ peer khác) ======
+def peer_listener(peer_id, ip, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((ip, port))
+    s.listen(5)
+    print(f"[{peer_id}]  Listening on {ip}:{port}")
+    while True:
+        conn, addr = s.accept()
+        data = conn.recv(1024).decode()
+        print(f"[{peer_id}]  Message from {addr}: {data}")
+        conn.close()
 
-    def handle_client(self, conn, addr):
+# ====== peer main logic ======
+def main():
+    peer_id = input("Enter your peer ID (peer1, peer2,...): ").strip()
+    port = int(input("Enter your listening port (e.g. 9001): "))
+
+    # 1️⃣ Đăng nhập (tùy chọn)
+    try:
+         r = requests.post(
+        f"{BACKEND}/login",
+        data={"username": "admin", "password": "password"}  # đúng cặp mà HttpAdapter chấp nhận
+    )
+         if r.status_code == 200:
+            print(f"[LOGIN] ✅ success ({r.status_code})")
+         else:
+            print(f"[LOGIN] ❌ failed ({r.status_code})")
+    except Exception as e:
+         print("[ERROR] Cannot login:", e)
+         return
+
+    # 2️⃣ Gửi thông tin đăng ký (submit-info)
+    try:
+        data = {"id": peer_id, "ip": "127.0.0.1", "port": port}
+        r = requests.post(f"{BACKEND}/submit-info", json=data)
+        print(f"[REGISTER] {r.status_code}: {r.text}")
+    except Exception as e:
+        print("[ERROR] Cannot submit info:", e)
+        return
+
+    # 3️⃣ Khởi động thread listener để nhận tin nhắn
+    threading.Thread(target=peer_listener, args=(peer_id, "127.0.0.1", port), daemon=True).start()
+    time.sleep(1)
+
+    # 4️⃣ Vòng lặp gửi tin
+    while True:
+        target = input("\nEnter target peer ID (or 'exit' to quit): ").strip()
+        if target.lower() == "exit":
+            break
+
+        # Hỏi backend địa chỉ của peer đích
         try:
-            msg = conn.recv(1024).decode()
-            data = json.loads(msg)
-            cmd = data.get("cmd")
-
-            if cmd == "register":
-                peer_id = data["peer_id"]
-                self.peers[peer_id] = (data["ip"], data["port"])
-                print(f"[Tracker] Registered peer {peer_id} at {data['ip']}:{data['port']}")
-                conn.send(b"OK")
-
-            elif cmd == "get_peers":
-                conn.send(json.dumps(self.peers).encode())
-
+            r = requests.post(f"{BACKEND}/connect-peer", json={"target_id": target})
+            res = json.loads(r.text)
         except Exception as e:
-            print("[Tracker] Error:", e)
-        finally:
-            conn.close()
+            print("[ERROR] Cannot connect to backend:", e)
+            continue
 
-    def run(self):
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.bind((self.ip, self.port))
-        server.listen(5)
-        print(f"[Tracker] Listening on {self.ip}:{self.port}")
-        while True:
-            conn, addr = server.accept()
-            threading.Thread(target=self.handle_client, args=(conn, addr), daemon=True).start()
+        if res.get("status") != "ok":
+            print("[ERROR]", res.get("message"))
+            continue
 
+        target_ip, target_port = res["ip"], res["port"]
+        msg = input(f"Message to {target}: ")
 
-# ======== Peer Node ============
-class PeerNode:
-    def __init__(self, peer_id, ip, port):
-        self.peer_id = peer_id
-        self.ip = ip
-        self.port = port
-        self.peers = {}
+        # Gửi tin nhắn trực tiếp qua TCP
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((target_ip, target_port))
+            s.sendall(f"{peer_id}: {msg}".encode())
+            s.close()
+            print(f"[{peer_id}]  Sent message to {target} ({target_ip}:{target_port})")
+        except Exception as e:
+            print(f"[{peer_id}]  Cannot send message to {target}: {e}")
 
-    def register_with_tracker(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((TRACKER_IP, TRACKER_PORT))
-        msg = json.dumps({"cmd": "register", "peer_id": self.peer_id, "ip": self.ip, "port": self.port})
-        s.send(msg.encode())
-        resp = s.recv(1024)
-        print(f"[{self.peer_id}] Registered with tracker -> {resp.decode()}")
-        s.close()
+    print("Bye")
 
-    def update_peers(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((TRACKER_IP, TRACKER_PORT))
-        msg = json.dumps({"cmd": "get_peers"})
-        s.send(msg.encode())
-        data = s.recv(4096)
-        self.peers = json.loads(data.decode())
-        print(f"[{self.peer_id}] Peer list:", self.peers)
-        s.close()
-
-    def send_message(self, target_id, msg):
-        if target_id not in self.peers:
-            print(f"[{self.peer_id}] Target {target_id} not found")
-            return
-        ip, port = self.peers[target_id]
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((ip, port))
-        s.send(f"{self.peer_id}: {msg}".encode())
-        s.close()
-        print(f"[{self.peer_id}] Sent message to {target_id}")
-
-    def listen_for_messages(self):
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.bind((self.ip, self.port))
-        server.listen(5)
-        print(f"[{self.peer_id}] Listening for P2P on {self.ip}:{self.port}")
-        while True:
-            conn, addr = server.accept()
-            msg = conn.recv(1024).decode()
-            print(f"[{self.peer_id}] Received: {msg}")
-            conn.close()
-
-
-# ======== Test Launcher ============
 if __name__ == "__main__":
-    # Step 1: Start Tracker
-    threading.Thread(target=TrackerServer().run, daemon=True).start()
-    time.sleep(1)
-
-    # Step 2: Start 2 Peers
-    peer1 = PeerNode("Peer1", "127.0.0.10", 9001)
-    peer2 = PeerNode("Peer2", "127.0.0.11", 9002)
-
-    # Listen threads
-    threading.Thread(target=peer1.listen_for_messages, daemon=True).start()
-    threading.Thread(target=peer2.listen_for_messages, daemon=True).start()
-    time.sleep(1)
-
-    # Register with tracker
-    peer1.register_with_tracker()
-    peer2.register_with_tracker()
-
-    # Update peer lists
-    peer1.update_peers()
-    peer2.update_peers()
-
-    # Step 3: Send messages (P2P)
-    time.sleep(1)
-    peer1.send_message("Peer2", "Hello from Peer1!")
-    peer2.send_message("Peer1", "Hey Peer1, got your message!")
-    time.sleep(3)
+    main()

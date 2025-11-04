@@ -106,6 +106,8 @@ if __name__ == "__main__":
     port = args.server_port
     listener_thread = threading.Thread(target=peer_listener, args=(ip, port), daemon=True)
     listener_thread.start()
+    
+    
     # Prepare and launch the RESTful application
     app.prepare_address(ip, port)
     app.run()
