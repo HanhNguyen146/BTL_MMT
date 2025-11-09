@@ -35,11 +35,7 @@ from .dictionary import CaseInsensitiveDict
 
 #: A dictionary mapping hostnames to backend IP and port tuples.
 #: Used to determine routing targets for incoming requests.
-PROXY_PASS = {
-    "192.168.56.103:8080": ('192.168.56.103', 9000),
-    "app1.local": ('192.168.56.103', 9001),
-    "app2.local": ('192.168.56.103', 9002),
-}
+
 
 
 def forward_request(host, port, request):
@@ -105,7 +101,7 @@ def resolve_routing_policy(hostname, routes):
             # Use a dummy host to raise an invalid connection
             proxy_host = '127.0.0.1'
             proxy_port = '9000'
-        elif len(value) == 1:
+        elif len(proxy_map) == 1:
             proxy_host, proxy_port = proxy_map[0].split(":", 2)
         #elif: # apply the policy handling 
         #   proxy_map
@@ -148,16 +144,37 @@ def handle_client(ip, port, conn, addr, routes):
             chunk = conn.recv(4096)
             if not chunk:
                 break
-        request += chunk
+            request += chunk
     except socket.timeout:
         pass
     request = request.decode(errors="ignore")
     #END XUAN added code
 
     # Extract hostname
+    hostname = None
     for line in request.splitlines():
         if line.lower().startswith('host:'):
             hostname = line.split(':', 1)[1].strip()
+            if hostname:
+                parts = hostname.split(':')
+              
+                if len(parts) == 2:
+                    host_part = parts[0]
+                    port_part = parts[1]
+                    if port_part == str(port) or port_part == '80':
+                        hostname = host_part
+                
+                if hostname not in routes and f'{hostname}:{port}' in routes:
+                     hostname = f'{hostname}:{port}'
+         
+            break 
+    if hostname is None:
+      
+        print("[Proxy] Error: Missing Host header")
+        response = b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
+        conn.sendall(response)
+        conn.close()
+        return
 
     print("[Proxy] {} at Host: {}".format(addr, hostname))
 
@@ -206,12 +223,15 @@ def run_proxy(ip, port, routes):
         proxy.listen(50)
         print("[Proxy] Listening on IP {} port {}".format(ip,port))
         while True:
-            conn, addr = proxy.accept()
             #
             #  TODO: implement the step of the client incomping connection
             #        using multi-thread programming with the
             #        provided handle_client routine
             #
+            conn, addr = proxy.accept()
+            t = threading.Thread(target=handle_client, args=(ip, port, conn, addr, routes))
+            t.daemon = True
+            t.start()
     except socket.error as e:
       print("Socket error: {}".format(e))
 

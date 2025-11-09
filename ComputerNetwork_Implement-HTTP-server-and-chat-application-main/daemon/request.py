@@ -20,7 +20,7 @@ request settings (cookies, auth, proxies).
 from .dictionary import CaseInsensitiveDict
 from .session_store import get_user_from_session  # added import
 
-DEBUG = False  # set True only when debugging
+DEBUG = True  # set True only when debugging
 
 class Request():
     """The fully mutable "class" `Request <Request>` object,

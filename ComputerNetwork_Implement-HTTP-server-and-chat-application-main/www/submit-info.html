@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Đăng ký tài khoản</title>
+<style>
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(135deg, #dceefb, #f4f8ff);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  margin: 0;
+}
+form {
+  background: #fff;
+  padding: 30px 40px;
+  border-radius: 12px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  width: 350px;
+}
+h1 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 25px;
+}
+input[type="text"], input[type="password"] {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+button {
+  width: 100%;
+  padding: 10px;
+  background-color: #38488f;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+button:hover {
+  background-color: #2e3570;
+}
+p {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 13px;
+}
+a { color: #38488f; text-decoration: none; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<form method="POST" action="/submit-info">
+  <h1>Đăng ký tài khoản</h1>
+  <input type="text" name="username" placeholder="Tên đăng nhập" required>
+  <input type="password" name="password" placeholder="Mật khẩu" required>
+  <button type="submit">Đăng ký</button>
+  <p>Đã có tài khoản? <a href="/login">Đăng nhập</a></p>
+</form>
+</body>
+</html>

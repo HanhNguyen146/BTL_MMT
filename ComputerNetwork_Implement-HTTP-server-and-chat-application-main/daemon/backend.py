@@ -115,5 +115,5 @@ def create_backend(ip, port, routes={}):
     :param port (int): Port number to listen on.
     :param routes (dict, optional): Dictionary of route handlers. Defaults to empty dict.
     """
-    run_backend(ip, port, routes)
 
+    run_backend(ip, port, routes)

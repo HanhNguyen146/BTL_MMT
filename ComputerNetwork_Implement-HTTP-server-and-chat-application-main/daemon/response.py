@@ -159,7 +159,7 @@ class Response():
             elif sub_type == 'html':
                 base_dir = BASE_DIR+"www/"
             else:
-                handle_text_other(sub_type)
+                base_dir = BASE_DIR+"static/"
         elif main_type == 'image':
             base_dir = BASE_DIR+"static/"
             self.headers['Content-Type']='image/{}'.format(sub_type)
@@ -178,6 +178,9 @@ class Response():
         #        video/mpeg
         #        ...
         #
+        elif main_type == 'video':
+             base_dir = BASE_DIR+"static/" 
+             self.headers['Content-Type']='video/{}'.format(sub_type)
         else:
             raise ValueError("Invalid MEME type: main_type={} sub_type={}".format(main_type,sub_type))
 
@@ -340,10 +343,12 @@ class Response():
         # For testing: set a session cookie when serving index.html (browser will send it back)
         # Store in self.cookies so build_response_header() emits Set-Cookie lines.
         if path == "/index.html" or path == "/":
-            self.cookies["session_id"] = "abc123"
+            self.cookies["sessionid"] = "abc123"
             print("[Response] Set-Cookie: session_id=abc123")
 
         c_len, self._content = self.build_content(path, base_dir)
         self._header = self.build_response_header(request)
 
         return self._header + self._content
+    
+    

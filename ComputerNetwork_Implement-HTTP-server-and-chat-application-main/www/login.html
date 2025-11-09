@@ -1,14 +1,66 @@
+<!DOCTYPE html>
 <html>
-  <body>
+<head>
+  <meta charset="UTF-8" />
+  <title>Login</title>
+  <style>
+    body {
+      background-color: #f0f0f2;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI",
+        "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    .container {
+      max-width: 400px;
+      margin: 100px auto;
+      background-color: #fdfdff;
+      padding: 2em;
+      border-radius: 0.5em;
+      box-shadow: 2px 3px 7px 2px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    h1 { color: #38488f; }
+    input[type="text"], input[type="password"] {
+      width: 90%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    input[type="submit"], .register-btn {
+      background-color: #38488f;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    input[type="submit"]:hover, .register-btn:hover {
+      background-color: #2e3570;
+    }
+    a:link, a:visited { color: #38488f; text-decoration: none; }
+    .register-container { margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
     <h1>Login</h1>
-    <form
-      method="POST"
-      action="/login"
-      enctype="application/x-www-form-urlencoded"
-    >
-      Username: <input name="username" type="text" /><br />
-      Password: <input name="password" type="password" /><br />
+    <form method="POST" action="/login" enctype="application/x-www-form-urlencoded">
+      <input name="username" type="text" placeholder="Username" required />
+      <br />
+      <input name="password" type="password" placeholder="Password" required />
+      <br />
       <input type="submit" value="Login" />
     </form>
-  </body>
+
+    <!-- Nút đăng ký -->
+    <div class="register-container">
+      <form action="/submit-info" method="GET">
+        <button type="submit" class="register-btn">Đăng ký</button>
+      </form>
+    </div>
+  </div>
+</body>
 </html>

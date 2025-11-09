@@ -1,21 +1,399 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="vi">
 <head>
-    <title>bksysnet@hcmut welcome</title>
+<meta charset="UTF-8">
+<title>Chat App (Hybrid P2P Client)</title>
+<style>
+/* === Giao diện tổng thể === */
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    margin: 0;
+    background: #e8ecf3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+h1 {
+    margin-top: 20px;
+    color: #222;
+}
+.container {
+    display: flex;
+    gap: 20px;
+    margin: 20px;
+    width: 90%;
+    max-width: 1100px;
+}
 
-    <meta charset="utf-8" />
-    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="css/styles.css" />
+/* === Sidebar === */
+.sidebar {
+    width: 280px;
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+}
+.sidebar h3 {
+    margin-bottom: 10px;
+    color: #444;
+}
+#peer-list {
+    list-style: none;
+    padding-left: 0;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fafafa;
+    max-height: 200px;
+    overflow-y: auto;
+}
+#peer-list li {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 500;
+}
+#peer-list li:hover { background-color: #eef3ff; }
+
+.chat-action-btn {
+    background-color: #007bff;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    padding: 4px 6px;
+    font-size: 10px;
+    cursor: pointer;
+}
+.chat-action-btn:hover { background-color: #0056b3; }
+
+#log-box {
+    margin-top: 10px;
+    width: 100%;
+    height: 180px;
+    resize: none;
+    background: #f7f7f7;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 11px;
+    padding: 5px;
+}
+
+/* === Main Chat === */
+.main-chat {
+    flex-grow: 1;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+#chat-box {
+    background: #fdfdfd;
+    border: 1px solid #ddd;
+    padding: 10px;
+    overflow-y: auto;
+    height: 180px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 12px;
+}
+#private-chat-area {
+    flex-grow: 1;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin-top: 10px;
+    padding: 10px;
+    overflow-y: auto;
+    background: #eef6ff;
+}
+
+/* === Form chat input === */
+.chat-input-area {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+input[type="text"] {
+    flex-grow: 1;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+button {
+    padding: 9px 15px;
+    border: none;
+    border-radius: 6px;
+    background-color: #28a745;
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+button:hover { background-color: #218838; }
+#register-btn { background-color: #38488f; }
+#register-btn:hover { background-color: #2e3570; }
+#refresh-peers { margin-top: 10px; background-color: #17a2b8; }
+#refresh-peers:hover { background-color: #117a8b; }
+
+#chat-status {
+    color: green;
+    font-weight: bold;
+    margin-left: 10px;
+}
+.active-chat-indicator { color: red; font-weight: bold; }
+</style>
 </head>
-
 <body>
-<div>
-    <h1>bksysnet@hcmut  Domain</h1>
-    <p>This domain is for use in illustrative examples in documents.
-    </p>
-  
-       <img src="images/welcome.png" alt="bksysnet at HCMUT" width="500" height="600">  
+
+<h1>💬 Chat App (P2P Client)</h1>
+
+<div style="margin-top:10px;">
+    <label for="username"><strong>Your Name:</strong></label>
+    <input type="text" id="username" value="Client_Web" style="padding:6px;">
+    <button id="register-btn">Register (Call /add-list)</button>
+    <span id="chat-status"></span>
 </div>
+
+<div class="container">
+    <div class="sidebar">
+        <h3>Peers Online</h3>
+        <ul id="peer-list"></ul>
+        <button id="refresh-peers">🔁 Refresh List</button>
+
+        <h3 style="margin-top:15px;">Log Console</h3>
+        <textarea id="log-box" readonly></textarea>
+    </div>
+
+    <div class="main-chat">
+        <h3>Broadcast Channel</h3>
+        <div id="chat-box"></div>
+
+        <h3 style="margin-top:15px;">Private Chat: 
+            <span id="current-peer-name" style="color:blue;">(None)</span>
+        </h3>
+        <div id="private-chat-area"></div>
+
+        <div class="chat-input-area">
+            <input type="text" id="message" placeholder="Type message...">
+            <button id="send-message-btn">Send</button>
+        </div>
+    </div>
+</div>
+
+<!-- === Script logic giữ nguyên gốc === -->
+<script>
+// (Toàn bộ phần JS giữ nguyên y hệt bản gốc)
+const chatBox = document.getElementById("chat-box");
+const privateChatArea = document.getElementById("private-chat-area");
+const currentPeerNameEl = document.getElementById("current-peer-name");
+const logBox = document.getElementById("log-box");
+const messageInput = document.getElementById("message");
+const sendMessageBtn = document.getElementById("send-message-btn");
+const peerListEl = document.getElementById("peer-list");
+const registerBtn = document.getElementById("register-btn");
+const usernameInput = document.getElementById("username");
+const refreshPeersBtn = document.getElementById("refresh-peers");
+
+let clientInfo = { user: "", host: "127.0.0.1", port: 0 }; 
+let lastMessageCount = 0;
+let isRegistered = false;
+
+// Trạng thái: Lưu trữ peer hiện tại để gửi tin nhắn riêng
+let currentPrivatePeer = null; 
+
+function log(msg) {
+    logBox.value += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+function appendMessage(targetBox, user, msg, isSystem = false) {
+    const div = document.createElement("div");
+    const prefix = isSystem ? "SYSTEM" : user;
+    div.innerHTML = `<strong>[${prefix}]</strong> ${msg}`;
+    targetBox.appendChild(div);
+    targetBox.scrollTop = targetBox.scrollHeight;
+}
+
+// --- API 1: Đăng ký (Register) ---
+async function addSelfToList() {
+    clientInfo.user = usernameInput.value;
+    if (!clientInfo.user) return;
+
+    const body = { user: clientInfo.user, item: "ONLINE", host: clientInfo.host, port: 0 }; // Port 0 vì là Web Client
+    
+    try {
+        const response = await fetch("http://127.0.0.1:9000/add-list", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+
+        // --- DEBUG ---
+        const responseData = await response.json(); // Server trả về JSON
+        log(`DEBUG /add-list status: ${response.status}, response: ${JSON.stringify(responseData)}`);
+        // --- END DEBUG ---
+
+        log(`Registered as ${clientInfo.user}. Starting refresh loop.`);
+        isRegistered = true;
+        document.getElementById("chat-status").textContent = ` (Đã đăng ký)`;
+        
+        refreshPeers();
+        setInterval(refreshData, 3000); 
+
+    } catch(e) {
+        log(`ERROR: Could not register with Tracker: ${e}`);
+    }
+}
+
+// --- API 2: Lấy dữ liệu (Chat Board Public và Peers) ---
+async function refreshData() {
+    if (!isRegistered) return;
+
+    let res;
+    try {
+        res = await fetch("http://127.0.0.1:9000/get-list");
+        if (!res.ok) { 
+            // Thêm log chi tiết khi lỗi
+            log(`ERROR: Tracker fetch failed. Status: ${res.status}`); 
+            return; 
+        }
+        
+        const data = await res.json();
+        
+        // 1. CẬP NHẬT CHAT BOX CHUNG (Message Board Public)
+        if (data.list.length > lastMessageCount) {
+            
+            // --- DEBUG ---
+            // Chỉ log khi có dữ liệu mới để tránh spam log
+            log(`DEBUG /get-list: Found new data. Total items: ${data.list.length}`);
+            // --- END DEBUG ---
+
+            // Xóa và vẽ lại Chat Box (Đơn giản nhất cho Polling)
+            chatBox.innerHTML = "";
+            let uniqueUsers = new Set();
+            
+            data.list.forEach(entry => {
+                // Chỉ hiển thị tin nhắn (item khác ONLINE)
+                if (entry.item !== "ONLINE") { 
+                    appendMessage(chatBox, entry.user, entry.item);
+                }
+                uniqueUsers.add(entry.user);
+            });
+            lastMessageCount = data.list.length; 
+            
+            // 2. CẬP NHẬT PEER LIST VÀ USERS
+            peerListEl.innerHTML = "";
+            uniqueUsers.forEach(user => {
+                // Chỉ hiển thị peer khác mình
+                if (user !== clientInfo.user) {
+                    const li = document.createElement("li");
+                    li.textContent = user;
+                    
+                    const chatBtn = document.createElement("button");
+                    chatBtn.textContent = "Chat";
+                    chatBtn.className = "chat-action-btn";
+                    chatBtn.onclick = () => activatePrivateChat(user);
+                    
+                    li.appendChild(chatBtn);
+                    peerListEl.appendChild(li);
+                }
+            });
+        }
+    } catch(e) {
+        log(`ERROR /get-list failed: ${e}`);
+    }
+}
+
+// --- LOGIC CHAT RIÊNG ---
+function activatePrivateChat(peerName) {
+    currentPrivatePeer = peerName;
+    currentPeerNameEl.textContent = peerName;
+    
+    // Xóa nội dung chat cũ
+    privateChatArea.innerHTML = "";
+    appendMessage(privateChatArea, "SYSTEM", `Bong bóng chat riêng với ${peerName} được kích hoạt.`);
+}
+
+// --- (THÊM HÀM NÀY) ---
+// Hàm này được gọi bởi nút "Refresh List"
+function refreshPeers() {
+    log("Manual refresh triggered.");
+    refreshData();
+}
+// --- (HẾT PHẦN THÊM) ---
+
+
+// --- Gửi tin nhắn (Private hoặc Broadcast) ---
+async function sendMessage() {
+    const msg = messageInput.value.trim();
+    if (!msg || !isRegistered) return;
+
+    if (currentPrivatePeer) {
+        // --- Gửi RIÊNG (Private Chat) ---
+        log(`Sending private message to ${currentPrivatePeer}...`);
+        const body = { from: clientInfo.user, to: currentPrivatePeer, message: msg };
+        
+        // Tái sử dụng logic send-peer
+        const response = await fetch("http://127.0.0.1:9000/send-peer", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(body)
+        });
+        
+        // --- DEBUG ---
+        const responseData = await response.text(); // Server trả về HTML
+        log(`DEBUG /send-peer status: ${response.status}, response: ${responseData}`);
+        // --- END DEBUG ---
+
+        // Ghi lại trong bong bóng chat
+        appendMessage(privateChatArea, "You", msg);
+        
+    } else {
+        // --- Gửi CHUNG (Broadcast Channel) ---
+        log("Sending broadcast message...");
+        const body = { from: clientInfo.user, message: msg };
+        
+        // Tái sử dụng logic broadcast-peer
+        const response = await fetch("http://127.0.0.1:9000/broadcast-peer", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(body)
+        });
+        
+        // --- DEBUG ---
+        const responseData = await response.text(); // Server trả về HTML
+        log(`DEBUG /broadcast-peer status: ${response.status}, response: ${responseData}`);
+        // --- END DEBUG ---
+        
+        // Ghi lại trong chat box chung
+        appendMessage(chatBox, "You", msg);
+    }
+    
+    messageInput.value = "";
+    refreshData(); // Cập nhật ngay lập tức
+}
+
+
+// --- Event listeners ---
+registerBtn.addEventListener("click", addSelfToList);
+sendMessageBtn.addEventListener("click", sendMessage);
+refreshPeersBtn.addEventListener("click", refreshPeers); // Giờ hàm này đã tồn tại
+
+// Tắt Enter mặc định và dùng Enter để gửi
+messageInput.addEventListener("keypress", (e) => {
+    if (e.key === 'Enter') {
+        sendMessage();
+    }
+});
+
+// Khởi tạo ban đầu
+window.onload = () => {
+    log("Client initialized. Click 'Register' to connect to Tracker.");
+};
+</script>
+
 </body>
 </html>

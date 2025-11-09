@@ -26,89 +26,9 @@ import socket
 import argparse
 
 from daemon import create_backend
-from daemon.weaprous import WeApRous
 
 # Default port number used if none is specified via command-line arguments.
 PORT = 9000 
-app = WeApRous()
-
-import json, threading, time
-active_peers = {}
-peer_lock = threading.Lock()
-
-@app.route('/login', methods=['POST'])
-def handle_login(headers, body):
-    try:
-        data = json.loads(body)
-        username = data.get("username")
-        password = data.get("password")
-        # Bypass xác thực để test
-        return json.dumps({"status": "success", "message": "Login OK"})
-    except Exception as e:
-        return json.dumps({"status": "error", "message": str(e)})
-
-@app.route('/submit-info', methods=['POST'])
-def handle_submit_info(headers, body):
-    try:
-        data = json.loads(body)
-        peer_id = data["id"]
-        peer_ip = data["ip"]
-        peer_port = data["port"]
-        with peer_lock:
-            active_peers[peer_id] = {"ip": peer_ip, "port": peer_port, "last_seen": time.time()}
-        print(f"[Backend] Registered peer {peer_id} at {peer_ip}:{peer_port}")
-        return json.dumps({"status": "registered", "peer_id": peer_id})
-    except Exception as e:
-        return json.dumps({"status": "error", "message": str(e)})
-
-@app.route('/connect-peer', methods=['POST'])
-def handle_connect_peer(headers, body):
-    try:
-        data = json.loads(body)
-        target_id = data.get("target_id")
-        if not target_id or target_id not in active_peers:
-            return json.dumps({"status": "error", "message": "Peer not found"})
-        info = active_peers[target_id]
-        return json.dumps({"status": "ok", "ip": info["ip"], "port": info["port"]})
-    except Exception as e:
-        return json.dumps({"status": "error", "message": str(e)})
-# # --- Handle GET /peer ---
-# @app.route('/api/peer', methods=['GET'])
-# def handle_peer(headers, body):
-#     """
-#     Trả JSON thuần để client parse được.
-#     """
-#     print(f"[Backend] Handle GET /peer (JSON response)")
-#     response = {
-#         "status": "ok",
-#         "msg": f"Peer alive at port {PORT}"
-#     }
-#     return json.dumps(response)
-
-
-
-# # --- Handle POST /message ---
-# @app.route('/api/message', methods=['POST'])
-# def handle_message(headers, body):
-#     """
-#     Nhận JSON từ peer hoặc text, in ra console và trả JSON phản hồi.
-#     """
-#     print(f"[Backend] Handle POST /message (JSON response)")
-#     try:
-#         data = json.loads(body)
-#     except Exception:
-#         # nếu peer gửi text thường, vẫn chấp nhận
-#         data = {"raw": body.strip()}
-
-#     print(f"[Backend] Received message: {data}")
-
-#     reply = {
-#         "status": "ok",
-#         "port": PORT,
-#         "received": data
-#     }
-#     return json.dumps(reply)
-
 
 if __name__ == "__main__":
     """
@@ -138,9 +58,9 @@ if __name__ == "__main__":
         default=PORT,
         help='Port number to bind the server. Default is {}.'.format(PORT)
     )
-
+ 
     args = parser.parse_args()
     ip = args.server_ip
     port = args.server_port
 
-    create_backend(ip, port,app.routes)
+    create_backend(ip, port)
