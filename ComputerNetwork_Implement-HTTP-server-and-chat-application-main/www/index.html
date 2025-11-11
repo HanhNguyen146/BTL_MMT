@@ -225,7 +225,7 @@ async function addSelfToList() {
     const body = { user: clientInfo.user, item: "ONLINE", host: clientInfo.host, port: 0 }; // Port 0 vì là Web Client
     
     try {
-        const response = await fetch("http://127.0.0.1:9000/add-list", {
+        const response = await fetch("http://127.0.0.1:8080/add-list", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body)
@@ -254,7 +254,7 @@ async function refreshData() {
 
     let res;
     try {
-        res = await fetch("http://127.0.0.1:9000/get-list");
+        res = await fetch("http://127.0.0.1:8080/get-list");
         if (!res.ok) { 
             // Thêm log chi tiết khi lỗi
             log(`ERROR: Tracker fetch failed. Status: ${res.status}`); 
@@ -337,7 +337,7 @@ async function sendMessage() {
         const body = { from: clientInfo.user, to: currentPrivatePeer, message: msg };
         
         // Tái sử dụng logic send-peer
-        const response = await fetch("http://127.0.0.1:9000/send-peer", {
+        const response = await fetch("http://127.0.0.1:8080/send-peer", {
             method: "POST",
             headers: {"Content-Type":"application/json"},
             body: JSON.stringify(body)
@@ -357,7 +357,7 @@ async function sendMessage() {
         const body = { from: clientInfo.user, message: msg };
         
         // Tái sử dụng logic broadcast-peer
-        const response = await fetch("http://127.0.0.1:9000/broadcast-peer", {
+        const response = await fetch("http://127.0.0.1:8080/broadcast-peer", {
             method: "POST",
             headers: {"Content-Type":"application/json"},
             body: JSON.stringify(body)

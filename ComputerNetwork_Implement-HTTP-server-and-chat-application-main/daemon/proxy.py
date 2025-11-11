@@ -29,6 +29,7 @@ Requirement:
 """
 import socket
 import threading
+import re
 from .response import *
 from .httpadapter import HttpAdapter
 from .dictionary import CaseInsensitiveDict

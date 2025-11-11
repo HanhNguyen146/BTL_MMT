@@ -20,12 +20,14 @@ raw URL paths and RESTful route definitions, and integrates with
 Request and Response objects to handle client-server communication.
 """
 
+import os
 from .request import Request
 from .response import Response
 from .dictionary import CaseInsensitiveDict
 
 _global_list = []
 peer_list = {}
+PEER_CONNECTION_FILE = os.path.join("db", "peer_connections.json")
 class HttpAdapter:
     """
     A mutable :class:`HTTP adapter <HTTP adapter>` for managing client connections
@@ -480,14 +482,16 @@ class HttpAdapter:
                 return
 
 ##########################################################
-        # --- /connect-peer ---
+        # --- /connect-peer (sửa)---
         if req.method == "POST" and req.path == "/connect-peer":
             try:
-                # --- lấy content-length ---
+                # --- Đọc raw HTTP body (đảm bảo không bị None) ---
+                raw_req = msg.decode(errors="ignore")  # msg là bytes nhận được từ conn.recv()
                 header_end = raw_req.find("\r\n\r\n")
-                content_len = 0
+                body = ""
                 if header_end != -1:
                     headers_part = raw_req[:header_end]
+                    content_len = 0
                     for line in headers_part.split("\r\n"):
                         if line.lower().startswith("content-length:"):
                             try:
@@ -495,73 +499,103 @@ class HttpAdapter:
                             except Exception:
                                 content_len = 0
                             break
+                    if content_len > 0:
+                        start = header_end + 4
+                        body_bytes = msg[start:start + content_len]
+                        body = body_bytes.decode("utf-8", errors="ignore")
 
-                # --- đọc body bytes ---
-                body = ""
-                if header_end != -1 and content_len > 0:
-                    start = header_end + 4
-                    body_bytes = msg[start:start + content_len]
+                # --- Kiểm tra body hợp lệ ---
+                if not body.strip():
+                    raise ValueError("Empty or missing JSON body in /connect-peer request")
+
+                # --- Parse JSON ---
+                data = json.loads(body)
+                from_user = data.get("from_user")
+                to_peer = data.get("to_peer")
+                if not from_user or not to_peer:
+                    raise ValueError("Missing 'from_user' or 'to_peer' in JSON body")
+
+                # --- Tìm thông tin từ danh sách toàn cục ---
+                from_info = next((p for p in _global_list if p.get("user") == from_user), None)
+                to_info = next((p for p in _global_list if p.get("user") == to_peer), None)
+                if not from_info or not to_info:
+                    raise ValueError("One or both peers not found in global list")
+
+                from_peer_data = {
+                    "peer": from_info["user"],
+                    "ip": from_info.get("host", "127.0.0.1"),
+                    "port": from_info.get("port")
+                }
+                to_peer_data = {
+                    "peer": to_info["user"],
+                    "ip": to_info.get("host", "127.0.0.1"),
+                    "port": to_info.get("port")
+                }
+
+                # --- Đọc file kết nối hiện tại ---
+                connections = {}
+                if os.path.exists(PEER_CONNECTION_FILE):
                     try:
-                        body = body_bytes.decode("utf-8")
-                    except Exception:
-                        body = body_bytes.decode("latin-1", errors="ignore")
-                else:
-                    body = ""
+                        with open(PEER_CONNECTION_FILE, "r", encoding="utf-8") as f:
+                            connections = json.load(f)
+                    except json.JSONDecodeError:
+                        connections = {}
 
-                # --- parse JSON ---
-                import json
-                try:
-                    data = json.loads(body)
-                    # Ví dụ: lấy "peer" từ JSON
-                    peer_user = data.get("peer")
-                    if not peer_user:
-                        raise ValueError("Missing 'peer'")
-                except Exception as e:
-                    resp_body = str(e)
-                    response = f"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: {len(resp_body)}\r\nConnection: close\r\n\r\n{resp_body}"
-                    conn.sendall(response.encode())
-                    conn.close()
-                    return
+                # --- Thêm kết nối hai chiều ---
+                if from_user not in connections:
+                    connections[from_user] = []
+                if not any(p["peer"] == to_peer for p in connections[from_user]):
+                    connections[from_user].append(to_peer_data)
 
-                # --- xử lý connect peer ---
-                # Gọi handler nếu cần, hoặc chỉ echo peer:
-                peer_info = next((entry for entry in _global_list if entry.get("user") == peer_user and "port" in entry), None)
+                if to_peer not in connections:
+                    connections[to_peer] = []
+                if not any(p["peer"] == from_user for p in connections[to_peer]):
+                    connections[to_peer].append(from_peer_data)
 
-                if not peer_info:
-                    resp = {"message": "Peer not online"}
-                else:
-                    # Trả thông tin port và host để client connect
-                    peer_name = peer_info["user"]
-                    peer_host = peer_info.get("host", "127.0.0.1")
-                    peer_port = peer_info["port"]
-                    resp = {
-                    "message": "Peer connected",
-                    "peer_user": peer_name,
-                    "host": peer_host,
-                    "port": peer_port
-                     }  
-                    peer_list[peer_name] = (peer_host, peer_port)
-                
-                body_resp = json.dumps(resp)
-                headers = f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {len(body_resp)}\r\nConnection: close\r\n\r\n"
+                # --- Ghi file db ---
+                os.makedirs(os.path.dirname(PEER_CONNECTION_FILE), exist_ok=True)
+                with open(PEER_CONNECTION_FILE, "w", encoding="utf-8") as f:
+                    json.dump(connections, f, ensure_ascii=False, indent=4)
+
+                # --- Tạo phản hồi ---
+                resp = {
+                    "message": f"Successfully connected {from_user} ↔ {to_peer}",
+                    "connected_to": to_peer_data
+                }
+                body_resp = json.dumps(resp, ensure_ascii=False)
+                headers = (
+                    f"HTTP/1.1 200 OK\r\n"
+                    f"Content-Type: application/json\r\n"
+                    f"Content-Length: {len(body_resp)}\r\n"
+                    f"Connection: close\r\n\r\n"
+                )
                 conn.sendall(headers.encode() + body_resp.encode())
 
+                print(f"[Tracker] ✅ {from_user} ↔ {to_peer} ghi vào {PEER_CONNECTION_FILE}")
+
             except Exception as e:
-                body_bytes = f"<h1>500 Internal Server Error</h1><p>{e}</p>".encode()
-                headers = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: {len(body_bytes)}\r\nConnection: close\r\n\r\n"
-                conn.sendall(headers + body_bytes)
+                err_msg = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
+                headers = (
+                    f"HTTP/1.1 500 Internal Server Error\r\n"
+                    f"Content-Type: text/html\r\n"
+                    f"Content-Length: {len(err_msg)}\r\n"
+                    f"Connection: close\r\n\r\n"
+                )
+                conn.sendall(headers.encode() + err_msg.encode())
+                print(f"[Tracker] ❌ Lỗi /connect-peer: {e}")
+
             finally:
                 conn.close()
-
+# --------------------------------------
 
         import socket
 
 # --------------------------------------
-# /broadcast-peer
+# /broadcast-peer (sửa)
 # --------------------------------------
         if req.method == "POST" and req.path == "/broadcast-peer":
             try:
-                # --- đọc body JSON ---
+                # --- Đọc body JSON ---
                 header_end = raw_req.find("\r\n\r\n")
                 content_len = 0
                 if header_end != -1:
@@ -580,41 +614,70 @@ class HttpAdapter:
                     body_bytes = msg[start:start + content_len]
                     body = body_bytes.decode("utf-8", errors="ignore")
 
+                # --- Parse JSON ---
+                import json
                 data = json.loads(body)
-                sender = data.get("from")
+                sender = data.get("from_user") or data.get("from")
                 message = data.get("message")
-
                 if not sender or not message:
-                    raise ValueError("Missing 'from' or 'message'")
+                    raise ValueError("Missing 'from_user' or 'message'")
 
+                # --- Đọc file kết nối thật ---
+                if not os.path.exists(PEER_CONNECTION_FILE):
+                    raise FileNotFoundError(f"File {PEER_CONNECTION_FILE} not found")
+
+                with open(PEER_CONNECTION_FILE, "r", encoding="utf-8") as f:
+                    connections = json.load(f)
+
+                if sender not in connections:
+                    raise ValueError(f"Sender '{sender}' not found in connections list")
+
+                peers = connections[sender]
                 success = 0
-                for peer_name, (ip, port) in peer_list.items():
-                    if peer_name == sender:
-                        continue
+
+                print(f"[Broadcast] {sender} gửi '{message}' tới {len(peers)} peers: {[p['peer'] for p in peers]}")
+
+                # --- Gửi message tới từng peer ---
+                for peer in peers:
+                    ip = peer.get("ip")
+                    port = peer.get("port")
+                    peer_name = peer.get("peer")
                     try:
                         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        s.connect((ip, port))
-                        s.sendall(f"[Broadcast] {sender}: {message}".encode("utf-8"))
+                        s.connect((ip, int(port)))
+                        s.sendall(f"[Broadcast from {sender}] {message}".encode("utf-8"))
                         s.close()
                         success += 1
                     except Exception as e:
-                        print(f"[Broadcast] Không gửi được tới {peer_name}: {e}")
+                        print(f"[Broadcast] ❌ Không gửi được tới {peer_name} ({e})")
 
+                # --- Phản hồi kết quả ---
                 body = f"<h1>Broadcast sent</h1><p>Message delivered to {success} peers.</p>"
-                headers = ("HTTP/1.1 200 OK\r\n"
-                        "Content-Type: text/html\r\n"
-                        f"Content-Length: {len(body)}\r\n\r\n")
+                headers = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html\r\n"
+                    f"Content-Length: {len(body)}\r\n"
+                    "Connection: close\r\n\r\n"
+                )
                 conn.sendall(headers.encode() + body.encode())
+
+                print(f"[Broadcast] ✅ {sender} gửi '{message}' thành công tới {success}/{len(peers)} peers.")
 
             except Exception as e:
                 err = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
-                conn.sendall(f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: {len(err)}\r\n\r\n".encode() + err.encode())
+                conn.sendall(
+                    f"HTTP/1.1 500 Internal Server Error\r\n"
+                    f"Content-Type: text/html\r\n"
+                    f"Content-Length: {len(err)}\r\n"
+                    f"Connection: close\r\n\r\n".encode() + err.encode()
+                )
+                print(f"[Broadcast] ❌ Lỗi /broadcast-peer: {e}")
             finally:
                 conn.close()
 
 
 # --------------------------------------
-# /send-peer
+# /send-peer (sửa)
 # --------------------------------------
         if req.method == "POST" and req.path == "/send-peer":
             try:
@@ -638,42 +701,56 @@ class HttpAdapter:
                     body = body_bytes.decode("utf-8", errors="ignore")
 
                 data = json.loads(body)
-                sender = data.get("from")
+                sender = data.get("from_user") or data.get("from")
                 target = data.get("to")
                 message = data.get("message")
 
                 if not sender or not target or not message:
-                    raise ValueError("Missing required fields")
+                    raise ValueError("Missing required fields: from_user, to, message")
 
-                if target not in peer_list:
-                    conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\nPeer not found")
-                    conn.close()
-                    return
+                # --- Đọc file peer_connections.json ---
+                if not os.path.exists(PEER_CONNECTION_FILE):
+                    raise FileNotFoundError(f"{PEER_CONNECTION_FILE} not found")
 
-                ip, port = peer_list[target]
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.connect((ip, port))
-                    s.sendall(f"[Private] {sender}: {message}".encode("utf-8"))
-                    s.close()
-                    body = f"<h1>Message sent</h1><p>{sender} to {target}</p>"
-                    headers = ("HTTP/1.1 200 OK\r\n"
-                            "Content-Type: text/html\r\n"
-                            f"Content-Length: {len(body)}\r\n\r\n")
-                    conn.sendall(headers.encode() + body.encode())
-                except Exception as e:
-                    raise RuntimeError(f"Send failed: {e}")
+                with open(PEER_CONNECTION_FILE, "r", encoding="utf-8") as f:
+                    connections = json.load(f)
+
+                # --- Tìm IP/Port của target ---
+                target_info = None
+                if sender in connections:
+                    for peer in connections[sender]:
+                        if peer.get("peer") == target:
+                            target_info = peer
+                            break
+
+                if not target_info:
+                    raise ValueError(f"Peer '{target}' not found in {PEER_CONNECTION_FILE}")
+
+                ip = target_info.get("ip", "127.0.0.1")
+                port = int(target_info.get("port", 0))
+
+                # --- Gửi message ---
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.connect((ip, port))
+                s.sendall(f"[Private] {sender}: {message}".encode("utf-8"))
+                s.close()
+
+                body = f"<h1>Message sent</h1><p>{sender} → {target}</p>"
+                headers = ("HTTP/1.1 200 OK\r\n"
+                        "Content-Type: text/html\r\n"
+                        f"Content-Length: {len(body)}\r\n\r\n")
+                conn.sendall(headers.encode() + body.encode())
+
+                print(f"[Send-Peer] ✅ {sender} → {target} ({ip}:{port}) | message: {message}")
 
             except Exception as e:
                 err = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
-                conn.sendall(f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: {len(err)}\r\n\r\n".encode() + err.encode())
+                conn.sendall(
+                    f"HTTP/1.1 500 Internal Server Error\r\n"
+                    f"Content-Type: text/html\r\n"
+                    f"Content-Length: {len(err)}\r\n\r\n".encode() + err.encode()
+                )
+                print(f"[Send-Peer] ❌ {e}")
+
             finally:
                 conn.close()
-        # --- 404 Not Found ---
-        try:
-            if not handled:
-                conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n<h1>404 Not Found</h1>")
-        except Exception:
-            pass
-        finally:
-            conn.close()
