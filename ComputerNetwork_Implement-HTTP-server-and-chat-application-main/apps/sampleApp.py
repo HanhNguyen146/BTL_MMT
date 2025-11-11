@@ -7,7 +7,7 @@ from daemon.weaprous import WeApRous
 app = WeApRous()
 
 # --- Cấu hình ---
-BACKEND_URL = "http://127.0.0.1:8080/api"  # proxy sẽ trỏ backend.local -> 127.0.0.1:9000
+BACKEND_URL = "http://127.0.0.1:8080"  # proxy sẽ trỏ backend.local -> 127.0.0.1:9000
 WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
 PEERS_CACHE_FILE = "peers_cache.json"
 PEERS_CACHE = {}
@@ -56,7 +56,7 @@ def submit_info_page(_):
 # ==========================================================
 #  API gọi tới backend (Tracker)
 # ==========================================================
-@app.route("/api/add-list", methods=["POST"])
+@app.route("/add-list", methods=["POST"])
 def add_list(body):
     try:
         data = json.loads(body)
@@ -68,7 +68,7 @@ def add_list(body):
         print(f"[WARN] Backend unreachable: {e}")
         return {"error": f"Backend unreachable: {e}"}
     
-@app.route("/api/get-list", methods=["GET"])
+@app.route("/get-list", methods=["GET"])
 def get_peer_list(_):
     try:
         print("[SampleApp] Forward /get-list to backend")
@@ -84,7 +84,7 @@ def get_peer_list(_):
         print(f"[WARN] Backend down: {e}. Using cache.")
         return {"error": str(e), "cached": list(PEERS_CACHE.keys())}
 
-@app.route("/api/connect-peer", methods=["POST"])
+@app.route("/connect-peer", methods=["POST"])
 def connect_peer(body):
     """
     API trung gian: nhận request connect-peer từ web hoặc peer,
@@ -101,27 +101,27 @@ def connect_peer(body):
         print(f"[ERROR] connect-peer: {e}")
         return {"error": str(e)}
 
-@app.route("/api/send-peer", methods=["POST"])
+@app.route("/send-peer", methods=["POST"])
 def send_peer(body):
     try:
         data = json.loads(body)
         sender = data.get("from")
         to_name = data.get("to")
         message = data.get("message", "")
-        print(f"[SampleApp] Gửi từ {sender} → {to_name}: {message}")
+        print(f"[SampleApp] Send from {sender} to {to_name}")
 
         # --- Ưu tiên gửi qua backend ---
         try:
             # Gửi qua backend
             r = requests.post(f"{BACKEND_URL}/send-peer", json=data, timeout=3)
             if r.status_code == 200:
-                print(f"[SampleApp] ✅ Gửi qua backend OK ({r.status_code})")
+                print(f"[SampleApp] ({r.status_code})")
                 save_chat_log(sender, to_name, message, "backend")
                 return {"status": "backend", "reply": r.text}
             else:
                 raise Exception(f"Backend trả lỗi {r.status_code}")
         except Exception as e:
-            print(f"[SampleApp] ⚠️ Backend lỗi hoặc tắt ({e}), fallback P2P")
+            print(f"[SampleApp]  Backend error ({e}), fallback P2P")
 
             # --- Nếu backend không dùng được, gửi trực tiếp ---
             if to_name in PEERS_CACHE:
@@ -131,14 +131,14 @@ def send_peer(body):
                     s.connect((ip, int(port)))
                     s.sendall(f"[Direct from Web] {message}".encode("utf-8"))
                     s.close()
-                    print(f"[SampleApp] ✅ Gửi trực tiếp tới {ip}:{port}")
+                    print(f"[SampleApp] Direct {ip}:{port}")
                     save_chat_log(sender, to_name, message, "direct")
                     return {"status": "direct", "target": f"{ip}:{port}"}
                 except Exception as e2:
-                    print(f"[SampleApp] ❌ Gửi P2P lỗi: {e2}")
+                    print(f"[SampleApp] P2P error: {e2}")
                     return {"error": str(e2)}
             else:
-                print("[SampleApp] ⚠️ Không có cache peer")
+                print("[SampleApp] No peer info in cache")
                 return {"error": "peer not found"}
 
     except Exception as e:
@@ -146,7 +146,7 @@ def send_peer(body):
         return {"error": str(e)}
 
 
-@app.route("/api/broadcast-peer", methods=["POST"])
+@app.route("/broadcast-peer", methods=["POST"])
 def broadcast(body):
     try:
         data = json.loads(body)
@@ -161,12 +161,12 @@ def broadcast(body):
                 s.close()
                 success.append(name)
             except Exception as e:
-                print(f"[WARN] Không gửi được tới {name}: {e}")
+                print(f"[WARN] Broadcast error {name}: {e}")
         return {"status": "ok", "sent_to": success}
     except Exception as e:
         return {"error": str(e)}
 
-@app.route("/api/get-log-messages", methods=["GET"])
+@app.route("/get-log-messages", methods=["GET"])
 def get_logs(_):
     try:
         with open("chat_log.json", "r", encoding="utf-8") as f:
@@ -201,7 +201,7 @@ def save_chat_log(sender, receiver, message, via):
         with open(log_file, "w", encoding="utf-8") as f:
             json.dump(logs, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        print(f"[WARN] Không thể lưu log: {e}")
+        print(f"[WARN] Can not save log: {e}")
 
 # ==========================================================
 #  Chạy ứng dụng
@@ -209,5 +209,5 @@ def save_chat_log(sender, receiver, message, via):
 if __name__ == "__main__":
     load_cache()
     print("[SampleApp] Web UI running at http://127.0.0.1:8000 (through proxy 8080)")
-    app.prepare_address("0.0.0.0", 8000)
+    app.prepare_address("127.0.0.1", 8000)
     app.run()

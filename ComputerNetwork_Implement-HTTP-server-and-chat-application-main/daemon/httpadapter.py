@@ -571,7 +571,7 @@ class HttpAdapter:
                 )
                 conn.sendall(headers.encode() + body_resp.encode())
 
-                print(f"[Tracker] ✅ {from_user} ↔ {to_peer} ghi vào {PEER_CONNECTION_FILE}")
+                
 
             except Exception as e:
                 err_msg = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
@@ -582,7 +582,7 @@ class HttpAdapter:
                     f"Connection: close\r\n\r\n"
                 )
                 conn.sendall(headers.encode() + err_msg.encode())
-                print(f"[Tracker] ❌ Lỗi /connect-peer: {e}")
+                print(f"[Tracker]  error /connect-peer: {e}")
 
             finally:
                 conn.close()
@@ -649,8 +649,7 @@ class HttpAdapter:
                         s.close()
                         success += 1
                     except Exception as e:
-                        print(f"[Broadcast] ❌ Không gửi được tới {peer_name} ({e})")
-
+                        print(f"[Broadcast] error {peer_name} ({e})")
                 # --- Phản hồi kết quả ---
                 body = f"<h1>Broadcast sent</h1><p>Message delivered to {success} peers.</p>"
                 headers = (
@@ -661,7 +660,7 @@ class HttpAdapter:
                 )
                 conn.sendall(headers.encode() + body.encode())
 
-                print(f"[Broadcast] ✅ {sender} gửi '{message}' thành công tới {success}/{len(peers)} peers.")
+                
 
             except Exception as e:
                 err = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
@@ -671,7 +670,7 @@ class HttpAdapter:
                     f"Content-Length: {len(err)}\r\n"
                     f"Connection: close\r\n\r\n".encode() + err.encode()
                 )
-                print(f"[Broadcast] ❌ Lỗi /broadcast-peer: {e}")
+                print(f"[Broadcast] error /broadcast-peer: {e}")
             finally:
                 conn.close()
 
@@ -741,7 +740,7 @@ class HttpAdapter:
                         f"Content-Length: {len(body)}\r\n\r\n")
                 conn.sendall(headers.encode() + body.encode())
 
-                print(f"[Send-Peer] ✅ {sender} → {target} ({ip}:{port}) | message: {message}")
+                
 
             except Exception as e:
                 err = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
@@ -750,7 +749,7 @@ class HttpAdapter:
                     f"Content-Type: text/html\r\n"
                     f"Content-Length: {len(err)}\r\n\r\n".encode() + err.encode()
                 )
-                print(f"[Send-Peer] ❌ {e}")
+               
 
             finally:
                 conn.close()
