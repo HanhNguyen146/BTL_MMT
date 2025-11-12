@@ -1,3 +1,4 @@
+import os
 import threading
 import socket
 import time
@@ -36,9 +37,28 @@ def start_peer(name, port, peer_name=None, message=None):
                 if data:
                     # In tin nhắn P2P nhận được
                     print(f"[{name}] (Vai tro Client) Nhan duoc tin: {data}")
+                    # Lưu tin nhắn vào file JSON
+                    save_message(name, data)
                 conn.close()
             except Exception as e:
                 print(f"[{name}] (Vai tro Client) Loi listener: {e}")
+    def save_message(peer_name, msg):
+        """Lưu tin nhắn nhận được vào file JSON"""
+        file_path = os.path.join("db", f"{peer_name}_messages.json")
+        os.makedirs("db", exist_ok=True)
+        messages = []
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    messages = json.load(f)
+            except Exception:
+                messages = []
+        messages.append({
+            "timestamp": time.strftime("%H:%M:%S"),
+            "content": msg
+        })
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(messages, f, ensure_ascii=False, indent=2)
 
     # Chạy luồng listener
     t = threading.Thread(target=listener, daemon=True)
@@ -116,7 +136,7 @@ def start_peer(name, port, peer_name=None, message=None):
     
     
     # --- FALLBACK: đọc file db khi backend tắt ---
-import json, os
+
 
 PEER_CONNECTION_FILE = os.path.join("db", "peer_connections.json")
 

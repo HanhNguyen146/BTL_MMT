@@ -3,7 +3,7 @@ import socket
 import time
 import json
 import requests
-
+import os
 # ========================================================
 # HÀM START_PEER (Lấy từ testp2p.py)
 # ========================================================
@@ -28,10 +28,28 @@ def start_peer(name, port):
                 data = conn.recv(1024).decode()
                 if data:
                     print(f"[{name}] (Vai tro Client) Nhan duoc tin: {data}")
+                    save_message(name, data)
                 conn.close()
             except Exception as e:
                 print(f"[{name}] (Vai tro Server) Loi listener: {e}")
-
+    
+    def save_message(peer_name, msg):
+        """Lưu tin nhắn nhận được vào file JSON"""
+        file_path = os.path.join("db", f"{peer_name}_messages.json")
+        os.makedirs("db", exist_ok=True)
+        messages = []
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    messages = json.load(f)
+            except Exception:
+                messages = []
+        messages.append({
+            "timestamp": time.strftime("%H:%M:%S"),
+            "content": msg
+        })
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(messages, f, ensure_ascii=False, indent=2)
     # Chạy luồng listener
     t = threading.Thread(target=listener, daemon=True)
     t.start()
@@ -57,17 +75,20 @@ def start_peer(name, port):
     except requests.exceptions.JSONDecodeError:
         print(f"[{name}] (Vai tro Client) LOI khi lay list: Server tra ve non-JSON: {r_get.text[:100]}...")
 
-    # # --- AUTO CONNECT ---
-    # try:
-    #     data = r_get.json()
-    #     peer_list = data.get("list", [])
-    #     for peer in peer_list:
-    #         peer_name_other = peer.get("user")
-    #         if peer_name_other and peer_name_other != name:
-    #             resp = requests.post(f"{TRACKER_URL}/connect-peer", json={"peer": peer_name_other})
-    #             print(f"[{name}] (Auto-connect) Ket noi voi '{peer_name_other}': {resp.text}")
-    # except Exception as e:
-    #     print(f"[{name}] (Auto-connect) Loi: {e}")
+    # --- AUTO CONNECT ---
+    try:
+        data = r_get.json()
+        peer_list = data.get("list", [])
+        print(f"[{name}] (Auto-connect) Dang tim cac peer khac de ket noi...")
+        for peer in peer_list:
+            peer_name_other = peer.get("user")
+            if peer_name_other and peer_name_other != name:
+                payload = {"from_user": name, "to_peer": peer_name_other}
+                resp = requests.post(f"{TRACKER_URL}/connect-peer", json=payload)
+                print(f"[{name}] (Auto-connect) Phat hien peer moi '{peer_name_other}', da ket noi: {resp.text}")
+    except Exception as e:
+        print(f"[{name}] (Auto-connect) Loi: {e}")
+
 
 
     # --- PHẦN BỔ SUNG: GỌI GET /login (Theo yêu cầu của bạn) ---
@@ -85,8 +106,8 @@ def start_peer(name, port):
     while True:
         time.sleep(5)
 
-    # --- FALLBACK: đọc file db khi backend tắt ---
-import json, os
+# --- FALLBACK: đọc file db khi backend tắt ---
+
 
 PEER_CONNECTION_FILE = os.path.join("db", "peer_connections.json")
 
@@ -113,6 +134,7 @@ if os.path.exists(PEER_CONNECTION_FILE):
         print(f"[{os.name}] Lỗi đọc file {PEER_CONNECTION_FILE}: {e}")
 else:
     print(f"[{os.name}] Chưa có file {PEER_CONNECTION_FILE} (chưa từng connect-peer)")
+
 # =========================
 # Main
 # =========================
