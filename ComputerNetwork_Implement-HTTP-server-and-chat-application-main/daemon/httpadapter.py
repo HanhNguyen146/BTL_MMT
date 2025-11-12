@@ -449,13 +449,14 @@ class HttpAdapter:
         # httpadapter.py
 
 ##############################################################################
-        # --- /add-list ---
+        # --- /add-list --- (ghi vào peer_connections.json)
         if req.method == "POST" and req.path == "/add-list":
             try:
-                # --- lấy content-length ---
+                import json, os
                 header_end = raw_req.find("\r\n\r\n")
-                content_len = 0
+                body = ""
                 if header_end != -1:
+                    content_len = 0
                     headers_part = raw_req[:header_end]
                     for line in headers_part.split("\r\n"):
                         if line.lower().startswith("content-length:"):
@@ -464,90 +465,103 @@ class HttpAdapter:
                             except Exception:
                                 content_len = 0
                             break
-
-                # --- đọc body bytes ---
-                body = ""
-                if header_end != -1 and content_len > 0:
-                    start = header_end + 4
-                    body_bytes = msg[start:start + content_len]
-                    try:
-                        body = body_bytes.decode("utf-8")
-                    except Exception:
-                        body = body_bytes.decode("latin-1", errors="ignore")
-                else:
-                    body = ""
+                    if content_len > 0:
+                        start = header_end + 4
+                        body_bytes = msg[start:start + content_len]
+                        body = body_bytes.decode("utf-8", errors="ignore")
 
                 # --- parse JSON ---
-                import json
-                try:
-                    data = json.loads(body)
-                    item = data.get("item")
-                    if not item:
-                        raise ValueError("Missing 'item'")
-                except Exception as e:
-                    headers = {"Content-Type": "text/plain"}
-                    resp_body = str(e)
-                    response = f"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: {len(resp_body)}\r\nConnection: close\r\n\r\n{resp_body}"
-                    conn.sendall(response.encode())
-                    conn.close()
-                    return
+                data = json.loads(body)
+                user = data.get("user")
+                host = data.get("host", "127.0.0.1")
+                port = data.get("port")
+                item = data.get("item", "ONLINE")
 
-                # --- add item vào danh sách ---
-                _global_list.append({
-                    "user": data.get("user"),      # tên user
-                    "item": item,          # item thêm
-                    "host": data.get("host", "127.0.0.1"),   # host client
-                    "port": data.get("port")                 # port client
-                })
-                resp = {"message": "Item added", "item": item}
+                if not user:
+                    raise ValueError("Missing 'user' field")
+
+                os.makedirs("db", exist_ok=True)
+                if os.path.exists(PEER_CONNECTION_FILE):
+                    try:
+                        with open(PEER_CONNECTION_FILE, "r", encoding="utf-8") as f:
+                            connections = json.load(f)
+                    except Exception:
+                        connections = {}
+                else:
+                    connections = {}
+
+                # --- cập nhật thông tin peer ---
+                if user not in connections:
+                    connections[user] = []
+
+                # chỉ lưu chính bản thân peer (host, port, trạng thái)
+                peer_entry = {"peer": user, "ip": host, "port": port, "status": item}
+                # ghi đè bản ghi cũ nếu đã tồn tại
+                connections[user] = [peer_entry]
+
+                with open(PEER_CONNECTION_FILE, "w", encoding="utf-8") as f:
+                    json.dump(connections, f, indent=4, ensure_ascii=False)
+
+                # --- phản hồi ---
+                resp = {"message": f"Peer '{user}' added to connection list", "peer": peer_entry}
                 body_resp = json.dumps(resp)
-                headers = f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {len(body_resp)}\r\nConnection: close\r\n\r\n"
+                headers = (
+                    f"HTTP/1.1 200 OK\r\n"
+                    f"Content-Type: application/json\r\n"
+                    f"Content-Length: {len(body_resp)}\r\n"
+                    f"Connection: close\r\n\r\n"
+                )
                 conn.sendall(headers.encode() + body_resp.encode())
 
             except Exception as e:
-                body_bytes = f"<h1>500 Internal Server Error</h1><p>{e}</p>".encode()
-                headers = ("HTTP/1.1 500 Internal Server Error\r\n"
-                        f"Content-Type: text/html\r\n"
-                        f"Content-Length: {len(body_bytes)}\r\n"
-                        "Connection: close\r\n"
-                        "\r\n").encode()
-                conn.sendall(headers + body_bytes)
+                err = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
+                conn.sendall(
+                    f"HTTP/1.1 500 Internal Server Error\r\n"
+                    f"Content-Type: text/html\r\n"
+                    f"Content-Length: {len(err)}\r\n"
+                    f"Connection: close\r\n\r\n".encode() + err.encode()
+                )
             finally:
                 conn.close()
+
 
         # #################################################
         # --- /1sx1 ---
         if req.method == "GET" and req.path == "/get-list":
             try:
-                sessionid = req.cookies.get("sessionid")
-                user = get_user_from_session(sessionid) if sessionid else None
+                if not os.path.exists(PEER_CONNECTION_FILE):
+                    resp = {"count": 0, "list": []}
+                else:
+                    with open(PEER_CONNECTION_FILE, "r", encoding="utf-8") as f:
+                        connections = json.load(f)
 
-                # if not user:
-                #     body_html = '<h1>401 Unauthorized</h1><p>Login required. <a href="/login">Login</a></p>'
-                #     headers = f"HTTP/1.1 401 Unauthorized\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {len(body_html)}\r\nConnection: close\r\n\r\n"
-                #     conn.sendall(headers.encode() + body_html.encode())
-                # else:
-                    # Lấy danh sách trực tiếp từ _global_list
-                resp = {"count": len(_global_list), "list": _global_list}
+                    # gộp toàn bộ các peer thành danh sách
+                    all_peers = []
+                    for peer_name, peer_entries in connections.items():
+                        for entry in peer_entries:
+                            all_peers.append(entry)
+
+                    resp = {"count": len(all_peers), "list": all_peers}
+
                 body_resp = json.dumps(resp)
                 headers = f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {len(body_resp)}\r\nConnection: close\r\n\r\n"
                 conn.sendall(headers.encode() + body_resp.encode())
-                handled = True
-                return
             except Exception as e:
                 body_bytes = f"<h1>500 Internal Server Error</h1><p>{e}</p>".encode()
                 headers = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: {len(body_bytes)}\r\nConnection: close\r\n\r\n"
-                conn.sendall(headers + body_bytes)
-                handled = True
+                conn.sendall(headers.encode() + body_bytes)
+            finally:
                 conn.close()
-                return
+
 
 ##########################################################
-        # --- /connect-peer (sửa)---
+# --- /connect-peer (đọc/ghi peer_connections.json) ---
         if req.method == "POST" and req.path == "/connect-peer":
             try:
-                # --- Đọc raw HTTP body (đảm bảo không bị None) ---
-                raw_req = msg.decode(errors="ignore")  # msg là bytes nhận được từ conn.recv()
+                import json, os
+
+                # --- Đọc body từ request ---
+                raw_req = msg.decode(errors="ignore")
                 header_end = raw_req.find("\r\n\r\n")
                 body = ""
                 if header_end != -1:
@@ -565,7 +579,6 @@ class HttpAdapter:
                         body_bytes = msg[start:start + content_len]
                         body = body_bytes.decode("utf-8", errors="ignore")
 
-                # --- Kiểm tra body hợp lệ ---
                 if not body.strip():
                     raise ValueError("Empty or missing JSON body in /connect-peer request")
 
@@ -576,52 +589,59 @@ class HttpAdapter:
                 if not from_user or not to_peer:
                     raise ValueError("Missing 'from_user' or 'to_peer' in JSON body")
 
-                # --- Tìm thông tin từ danh sách toàn cục ---
-                from_info = next((p for p in _global_list if p.get("user") == from_user), None)
-                to_info = next((p for p in _global_list if p.get("user") == to_peer), None)
-                if not from_info or not to_info:
-                    raise ValueError("One or both peers not found in global list")
+                # --- Đọc file peer_connections.json ---
+                if not os.path.exists(PEER_CONNECTION_FILE):
+                    raise FileNotFoundError(f"{PEER_CONNECTION_FILE} not found")
 
-                from_peer_data = {
-                    "peer": from_info["user"],
-                    "ip": from_info.get("host", "127.0.0.1"),
-                    "port": from_info.get("port")
-                }
-                to_peer_data = {
-                    "peer": to_info["user"],
-                    "ip": to_info.get("host", "127.0.0.1"),
-                    "port": to_info.get("port")
-                }
-
-                # --- Đọc file kết nối hiện tại ---
-                connections = {}
-                if os.path.exists(PEER_CONNECTION_FILE):
+                with open(PEER_CONNECTION_FILE, "r", encoding="utf-8") as f:
                     try:
-                        with open(PEER_CONNECTION_FILE, "r", encoding="utf-8") as f:
-                            connections = json.load(f)
+                        connections = json.load(f)
                     except json.JSONDecodeError:
                         connections = {}
 
-                # --- Thêm kết nối hai chiều ---
+                # --- Lấy thông tin của 2 peer từ file ---
+                from_info_list = connections.get(from_user, [])
+                to_info_list = connections.get(to_peer, [])
+                if not from_info_list or not to_info_list:
+                    raise ValueError(f"Peer '{from_user}' or '{to_peer}' not found in {PEER_CONNECTION_FILE}")
+
+                from_info = from_info_list[0]
+                to_info = to_info_list[0]
+
+                # --- Tạo dữ liệu 2 chiều ---
+                from_peer_data = {
+                    "peer": to_peer,
+                    "ip": to_info.get("ip", "127.0.0.1"),
+                    "port": to_info.get("port")
+                }
+                to_peer_data = {
+                    "peer": from_user,
+                    "ip": from_info.get("ip", "127.0.0.1"),
+                    "port": from_info.get("port")
+                }
+
+                # --- Gắn kết nối 2 chiều ---
                 if from_user not in connections:
                     connections[from_user] = []
                 if not any(p["peer"] == to_peer for p in connections[from_user]):
-                    connections[from_user].append(to_peer_data)
+                    connections[from_user].append(from_peer_data)
 
                 if to_peer not in connections:
                     connections[to_peer] = []
                 if not any(p["peer"] == from_user for p in connections[to_peer]):
-                    connections[to_peer].append(from_peer_data)
+                    connections[to_peer].append(to_peer_data)
 
-                # --- Ghi file db ---
+                # --- Ghi lại file ---
                 os.makedirs(os.path.dirname(PEER_CONNECTION_FILE), exist_ok=True)
                 with open(PEER_CONNECTION_FILE, "w", encoding="utf-8") as f:
                     json.dump(connections, f, ensure_ascii=False, indent=4)
 
-                # --- Tạo phản hồi ---
+                # --- Phản hồi ---
                 resp = {
                     "message": f"Successfully connected {from_user} ↔ {to_peer}",
-                    "connected_to": to_peer_data
+                    "from_user": from_user,
+                    "to_peer": to_peer,
+                    "connected_to": from_peer_data
                 }
                 body_resp = json.dumps(resp, ensure_ascii=False)
                 headers = (
@@ -632,7 +652,7 @@ class HttpAdapter:
                 )
                 conn.sendall(headers.encode() + body_resp.encode())
 
-                
+                print(f"[Tracker] ✅ Connected {from_user} ↔ {to_peer}")
 
             except Exception as e:
                 err_msg = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
@@ -643,10 +663,11 @@ class HttpAdapter:
                     f"Connection: close\r\n\r\n"
                 )
                 conn.sendall(headers.encode() + err_msg.encode())
-                print(f"[Tracker]  error /connect-peer: {e}")
+                print(f"[Tracker] ❌ error /connect-peer: {e}")
 
             finally:
                 conn.close()
+
 # --------------------------------------
 
         import socket

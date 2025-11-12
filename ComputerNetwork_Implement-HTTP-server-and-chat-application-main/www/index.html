@@ -291,21 +291,30 @@ async function refreshData() {
                 if (user !== clientInfo.user) {
                     const li = document.createElement("li");
                     li.textContent = user;
-                    
+                    // --- Nút Chat Riêng ---
                     const chatBtn = document.createElement("button");
                     chatBtn.textContent = "Chat";
                     chatBtn.className = "chat-action-btn";
                     chatBtn.onclick = () => activatePrivateChat(user);
+                    li.appendChild(chatBtn);
                     
                     // --- (MỚI) Nút xem log ---
                     const logBtn = document.createElement("button");
-                    logBtn.textContent = "Log";
+                    logBtn.textContent = "Log"; 
                     logBtn.className = "chat-action-btn";
                     logBtn.style.backgroundColor = "#6c757d";
                     logBtn.onclick = () => loadChatLog(user);
                     li.appendChild(logBtn);
+                    
+                    // --- Nút Connect ---
+                    const connectBtn = document.createElement("button");
+                    connectBtn.textContent = "Connect";
+                    connectBtn.className = "chat-action-btn";
+                    connectBtn.style.backgroundColor = "#28a745";
+                    connectBtn.onclick = () => connectToPeer(user);
+                    li.appendChild(connectBtn);
 
-                    li.appendChild(chatBtn);
+                    
                     peerListEl.appendChild(li);
                 }
             });
@@ -387,6 +396,7 @@ async function sendMessage() {
 // --- (MỚI) Hàm hiển thị lịch sử tin nhắn của peer ---
 async function loadChatLog(peerName) {
     try {
+        // --- Gửi request lấy log của peer được chọn ---
         const response = await fetch("/get-chat-log", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -398,56 +408,113 @@ async function loadChatLog(peerName) {
         chatArea.innerHTML = "";
 
         if (!data.messages || data.messages.length === 0) {
-            chatArea.innerHTML = `<i>No messages found for ${peerName}</i>`;
+            chatArea.innerHTML = `<i>Không tìm thấy tin nhắn giữa ${clientInfo.user} và ${peerName}</i>`;
             return;
         }
 
-        data.messages.forEach(msg => {
+        // ✅ Lọc chỉ những tin có liên quan đến mình, peer hoặc broadcast
+        const filtered = data.messages.filter(msg => {
+            const content = msg.content || "";
+            return (
+                content.includes(clientInfo.user) ||
+                content.includes(peerName) ||
+                content.includes("(broadcast)")
+            );
+        });
+
+        // --- Hiển thị tin nhắn ---
+        filtered.forEach(msg => {
             const div = document.createElement("div");
             div.style.padding = "6px";
             div.style.marginBottom = "4px";
             div.style.borderRadius = "6px";
             div.style.fontFamily = "monospace";
+            div.style.textAlign = "left";
 
-            // ✅ Kiểm tra vai trò hiện tại
-            let role = msg.direction;
-            // nếu mình (clientInfo.user) khác peerName, đảo hướng
-            if (clientInfo.user !== peerName) {
-                if (msg.direction === "send") role = "recv";
-                else if (msg.direction === "recv") role = "send";
+            const content = msg.content || "";
+            let role = msg.direction; // mặc định
+
+            // === Phân loại vai trò (SEND / RECV) theo góc nhìn của chính mình ===
+            if (content.includes("(broadcast)")) {
+                // Broadcast: nếu dòng có "Broadcasted:" -> mình gửi, nếu "From" -> mình nhận
+                if (content.includes("Broadcasted:")) role = "send";
+                else if (content.includes("From")) role = "recv";
+            } 
+            else if (content.includes(`To ${peerName}`) && msg.direction === "send") {
+                // mình gửi riêng cho peer kia
+                role = "send";
+            } 
+            else if (content.includes(`From ${peerName}`) && msg.direction === "recv") {
+                // mình nhận từ peer kia
+                role = "recv";
+            } 
+            else if (content.includes(`To ${clientInfo.user}`)) {
+                // peer gửi riêng cho mình
+                role = "recv";
+            } 
+            else if (content.includes(`From ${clientInfo.user}`)) {
+                // mình gửi riêng (trường hợp mình đang xem log chính mình)
+                role = "send";
             }
 
-            // ✅ màu hiển thị
+            // === Gán màu theo role ===
             if (role === "recv") {
-                div.style.background = "#d1e7dd"; // xanh
+                div.style.background = "#d1e7dd"; // xanh nhạt
             } else if (role === "send") {
-                div.style.background = "#f8d7da"; // đỏ
+                div.style.background = "#f8d7da"; // đỏ nhạt
             } else {
                 div.style.background = "#e2e3e5";
             }
-            div.style.textAlign = "left";
 
+            // === Hiển thị nội dung ===
             div.innerHTML = `<b>[${role.toUpperCase()}]</b> ${msg.content}
                              <span style="font-size:10px;color:gray">(${msg.timestamp})</span>`;
             chatArea.appendChild(div);
             chatArea.appendChild(document.createElement("br"));
         });
 
-        // Nếu mình đang xem log của người khác → hiển thị theo góc nhìn của mình
-            let systemLabel =
-                clientInfo.user === peerName
-                    ? `Hiển thị lịch sử tin nhắn của chính bạn (${clientInfo.user})`
-                    : `Hiển thị lịch sử tin nhắn giữa ${clientInfo.user} và ${peerName}`;
-
-            appendMessage(chatArea, "SYSTEM", systemLabel);
+        // --- SYSTEM message ---
+        const systemLabel =
+            clientInfo.user === peerName
+                ? `Hiển thị lịch sử tin nhắn của chính bạn (${clientInfo.user})`
+                : `Hiển thị lịch sử tin nhắn giữa ${clientInfo.user} và ${peerName}`;
+        appendMessage(chatArea, "SYSTEM", systemLabel);
 
     } catch (err) {
         console.error(err);
         alert("Lỗi khi tải lịch sử tin nhắn!");
     }
 }
+// --- (MỚI) Hàm Connect thủ công giữa 2 peer ---
+async function connectToPeer(peerName) {
+    if (!clientInfo.user) {
+        alert("Bạn cần đăng ký trước khi kết nối!");
+        return;
+    }
 
+    log(`Connecting ${clientInfo.user} → ${peerName} ...`);
 
+    try {
+        const body = { from_user: clientInfo.user, to_peer: peerName };
+        const response = await fetch("/connect-peer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            log(`✅ Connected to ${peerName}: ${JSON.stringify(data)}`);
+            alert(`✅ Kết nối thành công với ${peerName}`);
+        } else {
+            log(`❌ Connect failed: ${data.error || response.statusText}`);
+            alert(`❌ Lỗi khi kết nối: ${data.error || response.statusText}`);
+        }
+    } catch (e) {
+        log(`❌ Connect request error: ${e}`);
+        alert("Không thể kết nối đến backend!");
+    }
+}
 
 
 // --- Event listeners ---

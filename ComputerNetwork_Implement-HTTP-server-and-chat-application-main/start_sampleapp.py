@@ -139,44 +139,52 @@ def submit_info_page(_):
 # ==========================================================
 @app.route("/add-list", methods=["POST"])
 def add_list(body):
+    """
+    Gửi yêu cầu đăng ký peer tới backend (lưu trong peer_connections.json)
+    """
     try:
         data_from_client = json.loads(body)
-        
         name = data_from_client.get("user")
         if not name:
             raise ValueError("Missing 'user' in body")
+
         data_for_backend = {
             "user": name,
-            "item": "ONLINE (Web Client)",
-            "host": app.ip,  
-            "port": app.port 
+            "item": "ONLINE",           # backend sẽ ghi vào status
+            "host": app.ip,             # IP của peer (app)
+            "port": app.port            # cổng peer đang chạy
         }
-        
-        print(f"[SampleApp 9001] Forwarding /add-list to backend with NEW data: {data_for_backend}")
-        
-        # 4. Chuyển tiếp (forward) dict 'data_for_backend' đến Proxy (8080)
+
+        print(f"[SampleApp] Forwarding /add-list → backend: {data_for_backend}")
         r = requests.post(f"{BACKEND_URL}/add-list", json=data_for_backend, timeout=3)
-        
-        print(f"[Backend] -> {r.status_code} {r.text[:100]}")
-        
-        # 5. Trả về kết quả cho Trình duyệt
+        print(f"[Backend] → {r.status_code} {r.text[:120]}")
+
+        # Phản hồi JSON cho trình duyệt
         return r.json()
+
     except Exception as e:
         print(f"[WARN] Backend unreachable: {e}")
         return {"error": f"Backend unreachable: {e}"}
-    
+
 @app.route("/get-list", methods=["GET"])
 def get_peer_list(_):
+    """
+    Lấy danh sách peers từ peer_connections.json qua backend
+    """
     try:
-        print("[SampleApp] Forward /get-list to backend")
+        print("[SampleApp] Forward /get-list → backend")
         r = requests.get(f"{BACKEND_URL}/get-list", timeout=3)
         data = r.json()
+
+        # backend mới trả: {"list": [{"peer":..., "ip":..., "port":...}, ...]}
         for p in data.get("list", []):
-            if all(k in p for k in ("user", "host", "port")):
-                PEERS_CACHE[p["user"]] = (p["host"], p["port"])
+            if all(k in p for k in ("peer", "ip", "port")):
+                PEERS_CACHE[p["peer"]] = (p["ip"], p["port"])
+
         save_cache()
         print(f"[Cache] Updated peers: {list(PEERS_CACHE.keys())}")
         return data
+
     except Exception as e:
         print(f"[WARN] Backend down: {e}. Using cache.")
         return {"error": str(e), "cached": list(PEERS_CACHE.keys())}
