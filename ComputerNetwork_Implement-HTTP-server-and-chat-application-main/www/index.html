@@ -225,7 +225,7 @@ async function addSelfToList() {
     const body = { user: clientInfo.user, item: "ONLINE", host: clientInfo.host, port: 0 }; // Port 0 vì là Web Client
     
     try {
-        const response = await fetch("http://127.0.0.1:8080/add-list", {
+        const response = await fetch("/add-list", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body)
@@ -254,7 +254,7 @@ async function refreshData() {
 
     let res;
     try {
-        res = await fetch("http://127.0.0.1:8080/get-list");
+        res = await fetch("/get-list");
         if (!res.ok) { 
             // Thêm log chi tiết khi lỗi
             log(`ERROR: Tracker fetch failed. Status: ${res.status}`); 
@@ -297,6 +297,14 @@ async function refreshData() {
                     chatBtn.className = "chat-action-btn";
                     chatBtn.onclick = () => activatePrivateChat(user);
                     
+                    // --- (MỚI) Nút xem log ---
+                    const logBtn = document.createElement("button");
+                    logBtn.textContent = "Log";
+                    logBtn.className = "chat-action-btn";
+                    logBtn.style.backgroundColor = "#6c757d";
+                    logBtn.onclick = () => loadChatLog(user);
+                    li.appendChild(logBtn);
+
                     li.appendChild(chatBtn);
                     peerListEl.appendChild(li);
                 }
@@ -337,7 +345,7 @@ async function sendMessage() {
         const body = { from: clientInfo.user, to: currentPrivatePeer, message: msg };
         
         // Tái sử dụng logic send-peer
-        const response = await fetch("http://127.0.0.1:8080/send-peer", {
+        const response = await fetch("/send-peer", {
             method: "POST",
             headers: {"Content-Type":"application/json"},
             body: JSON.stringify(body)
@@ -357,7 +365,7 @@ async function sendMessage() {
         const body = { from: clientInfo.user, message: msg };
         
         // Tái sử dụng logic broadcast-peer
-        const response = await fetch("http://127.0.0.1:8080/broadcast-peer", {
+        const response = await fetch("/broadcast-peer", {
             method: "POST",
             headers: {"Content-Type":"application/json"},
             body: JSON.stringify(body)
@@ -375,6 +383,71 @@ async function sendMessage() {
     messageInput.value = "";
     refreshData(); // Cập nhật ngay lập tức
 }
+
+// --- (MỚI) Hàm hiển thị lịch sử tin nhắn của peer ---
+async function loadChatLog(peerName) {
+    try {
+        const response = await fetch("/get-chat-log", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ peer: peerName })
+        });
+        const data = await response.json();
+
+        const chatArea = document.getElementById("private-chat-area");
+        chatArea.innerHTML = "";
+
+        if (!data.messages || data.messages.length === 0) {
+            chatArea.innerHTML = `<i>No messages found for ${peerName}</i>`;
+            return;
+        }
+
+        data.messages.forEach(msg => {
+            const div = document.createElement("div");
+            div.style.padding = "6px";
+            div.style.marginBottom = "4px";
+            div.style.borderRadius = "6px";
+            div.style.fontFamily = "monospace";
+
+            // ✅ Kiểm tra vai trò hiện tại
+            let role = msg.direction;
+            // nếu mình (clientInfo.user) khác peerName, đảo hướng
+            if (clientInfo.user !== peerName) {
+                if (msg.direction === "send") role = "recv";
+                else if (msg.direction === "recv") role = "send";
+            }
+
+            // ✅ màu hiển thị
+            if (role === "recv") {
+                div.style.background = "#d1e7dd"; // xanh
+            } else if (role === "send") {
+                div.style.background = "#f8d7da"; // đỏ
+            } else {
+                div.style.background = "#e2e3e5";
+            }
+            div.style.textAlign = "left";
+
+            div.innerHTML = `<b>[${role.toUpperCase()}]</b> ${msg.content}
+                             <span style="font-size:10px;color:gray">(${msg.timestamp})</span>`;
+            chatArea.appendChild(div);
+            chatArea.appendChild(document.createElement("br"));
+        });
+
+        // Nếu mình đang xem log của người khác → hiển thị theo góc nhìn của mình
+            let systemLabel =
+                clientInfo.user === peerName
+                    ? `Hiển thị lịch sử tin nhắn của chính bạn (${clientInfo.user})`
+                    : `Hiển thị lịch sử tin nhắn giữa ${clientInfo.user} và ${peerName}`;
+
+            appendMessage(chatArea, "SYSTEM", systemLabel);
+
+    } catch (err) {
+        console.error(err);
+        alert("Lỗi khi tải lịch sử tin nhắn!");
+    }
+}
+
+
 
 
 // --- Event listeners ---

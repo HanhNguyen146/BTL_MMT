@@ -147,6 +147,67 @@ class HttpAdapter:
 
         req.prepare(raw_req, routes)
 
+        if req.path == "/favicon.ico":
+            print("[HttpAdapter] Handling /favicon.ico request (204 No Content)")
+            headers = (
+                "HTTP/1.1 204 No Content\r\n"
+                "Connection: close\r\n\r\n"
+            )
+            conn.sendall(headers.encode())
+            conn.close()
+            return # Kết thúc ngay lập tức
+        
+        handler = routes.get((req.method, req.path)) 
+        
+        if handler:
+            print(f"[HttpAdapter] Found WeApRous route: {handler.__name__} for {req.method} {req.path}")
+            try:
+                # Lấy body cho POST/PUT
+                body = ""
+                if req.method in ("POST", "PUT"):
+                    header_end = raw_req.find("\r\n\r\n")
+                    if header_end != -1:
+                        content_len = 0
+                        for line in raw_req[:header_end].split("\r\n"):
+                            if line.lower().startswith("content-length:"):
+                                content_len = int(line.split(":", 1)[1].strip())
+                                break
+                        if content_len > 0:
+                            start = header_end + 4
+                            body_bytes = msg[start:start + content_len]
+                            body = body_bytes.decode("utf-8", errors="ignore")
+                
+                # *** GỌI HÀM CỦA BẠN (VÍ DỤ: home(), login_page(), add_list()) ***
+                # Logic (ví dụ: print("HELLLOO...")) của bạn sẽ chạy ở đây
+                result = handler(body) 
+
+                # Xử lý kết quả trả về (HTML hoặc JSON)
+                if isinstance(result, dict): # Nếu là JSON
+                    body_resp = json.dumps(result, ensure_ascii=False)
+                    headers = f"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {len(body_resp.encode('utf-8'))}\r\nConnection: close\r\n\r\n"
+                    conn.sendall(headers.encode() + body_resp.encode('utf-8'))
+                else: # Nếu là HTML (string)
+                    body_resp = result.encode("utf-8")
+                    headers = f"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {len(body_resp)}\r\nConnection: close\r\n\r\n"
+                    conn.sendall(headers.encode() + body_resp)
+                
+                conn.close()
+                return # Đã xử lý xong bằng WeApRous
+            
+            except Exception as e:
+                # Xử lý lỗi nếu hàm handler (ví dụ: home()) của bạn bị lỗi
+                print(f"[HttpAdapter] Error executing WeApRous handler {handler.__name__}: {e}")
+                err_msg = f"<h1>500 Internal Server Error</h1><p>Handler Error: {e}</p>"
+                headers = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: {len(err_msg)}\r\nConnection: close\r\n\r\n"
+                conn.sendall(headers.encode() + err_msg.encode())
+                conn.close()
+                return
+
+        # ==========================================================
+        # BƯỚC 2: LOGIC DỰ PHÒNG (Cho Backend 9000 - nếu không phải WeApRous)
+        # ==========================================================
+        print(f"[HttpAdapter] No WeApRous route found. Falling back to hardcoded logic for {req.method} {req.path}...")
+
         if req.method == "GET" and req.path == "/login":
             try:
                 with open(os.path.join("www", "login.html"), "r", encoding="utf-8") as fh:
@@ -637,19 +698,19 @@ class HttpAdapter:
 
                 print(f"[Broadcast] {sender} gửi '{message}' tới {len(peers)} peers: {[p['peer'] for p in peers]}")
 
-                # --- Gửi message tới từng peer ---
-                for peer in peers:
-                    ip = peer.get("ip")
-                    port = peer.get("port")
-                    peer_name = peer.get("peer")
-                    try:
-                        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        s.connect((ip, int(port)))
-                        s.sendall(f"[Broadcast from {sender}] {message}".encode("utf-8"))
-                        s.close()
-                        success += 1
-                    except Exception as e:
-                        print(f"[Broadcast] error {peer_name} ({e})")
+                # # --- Gửi message tới từng peer ---
+                # for peer in peers:
+                #     ip = peer.get("ip")
+                #     port = peer.get("port")
+                #     peer_name = peer.get("peer")
+                #     try:
+                #         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                #         s.connect((ip, int(port)))
+                #         s.sendall(f"[Broadcast from {sender}] {message}".encode("utf-8"))
+                #         s.close()
+                #         success += 1
+                #     except Exception as e:
+                #         print(f"[Broadcast] error {peer_name} ({e})")
                 # --- Phản hồi kết quả ---
                 body = f"<h1>Broadcast sent</h1><p>Message delivered to {success} peers.</p>"
                 headers = (
@@ -729,10 +790,10 @@ class HttpAdapter:
                 port = int(target_info.get("port", 0))
 
                 # --- Gửi message ---
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.connect((ip, port))
-                s.sendall(f"[Private] {sender}: {message}".encode("utf-8"))
-                s.close()
+                # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                # s.connect((ip, port))
+                # s.sendall(f"[Private] {sender}: {message}".encode("utf-8"))
+                # s.close()
 
                 body = f"<h1>Message sent</h1><p>{sender} → {target}</p>"
                 headers = ("HTTP/1.1 200 OK\r\n"

@@ -1,0 +1,42 @@
+[
+  {
+    "timestamp": "2025-11-12 23:00:57",
+    "direction": "send",
+    "content": "Broadcasted: hi all"
+  },
+  {
+    "timestamp": "2025-11-12 23:01:04",
+    "direction": "send",
+    "content": "To Client2: hi 2"
+  },
+  {
+    "timestamp": "2025-11-12 23:01:49",
+    "direction": "recv",
+    "content": "From Client2 (broadcast): hi all 2"
+  },
+  {
+    "timestamp": "2025-11-12 23:02:07",
+    "direction": "recv",
+    "content": "From Client2: hi 1"
+  },
+  {
+    "timestamp": "2025-11-12 23:05:31",
+    "direction": "send",
+    "content": "Broadcasted: hiiiii"
+  },
+  {
+    "timestamp": "2025-11-12 23:05:36",
+    "direction": "send",
+    "content": "To Client2: hiiiiiiii"
+  },
+  {
+    "timestamp": "2025-11-12 23:06:50",
+    "direction": "send",
+    "content": "To Client2: chao ban 2"
+  },
+  {
+    "timestamp": "2025-11-12 23:07:17",
+    "direction": "recv",
+    "content": "From Client2 (broadcast): chao ban 1"
+  }
+]

@@ -29,7 +29,6 @@ Requirement:
 """
 import socket
 import threading
-import re
 from .response import *
 from .httpadapter import HttpAdapter
 from .dictionary import CaseInsensitiveDict
@@ -188,34 +187,8 @@ def handle_client(ip, port, conn, addr, routes):
         print("Not a valid integer")
 
     if resolved_host:
-        # --- nếu là host chính 127.0.0.1:8080 thì gửi song song ---
-        if hostname == "127.0.0.1:8080":
-            def send_to_backend():
-                try:
-                    resp = forward_request("127.0.0.1", 9000, request)
-                except Exception as e:
-                    print(f"[Proxy]  Backend error: {e}")
-
-            def send_to_sampleapp():
-                try:
-                    resp = forward_request("127.0.0.1", 8000, request)
-                except Exception as e:
-                    print(f"[Proxy]  SampleApp error: {e}")
-
-            # --- chạy 2 thread song song ---
-            threading.Thread(target=send_to_backend, daemon=True).start()
-            threading.Thread(target=send_to_sampleapp, daemon=True).start()
-
-            # --- dùng backend làm phản hồi chính ---
-            try:
-                response = forward_request("127.0.0.1", 9000, request)
-            except Exception:
-                response = forward_request("127.0.0.1", 8000, request)
-
-        else:
-            # các host khác thì xử lý như cũ
-            response = forward_request(resolved_host, resolved_port, request)
-
+        print("[Proxy] Host name {} is forwarded to {}:{}".format(hostname,resolved_host, resolved_port))
+        response = forward_request(resolved_host, resolved_port, request)        
     else:
         response = (
             "HTTP/1.1 404 Not Found\r\n"
@@ -224,7 +197,7 @@ def handle_client(ip, port, conn, addr, routes):
             "Connection: close\r\n"
             "\r\n"
             "404 Not Found"
-        ).encode("utf-8")
+        ).encode('utf-8')
     conn.sendall(response)
     conn.close()
 

@@ -35,30 +35,40 @@ def start_peer(name, port, peer_name=None, message=None):
                 conn, addr = s.accept()
                 data = conn.recv(1024).decode()
                 if data:
-                    # In tin nhắn P2P nhận được
                     print(f"[{name}] (Vai tro Client) Nhan duoc tin: {data}")
-                    # Lưu tin nhắn vào file JSON
-                    save_message(name, data)
+                    # Tự động tách tên người gửi nếu có cú pháp [Private] sender:
+                    sender = "unknown"
+                    if ":" in data:
+                        sender = data.split(":")[0].split()[-1]
+                    save_message_global(sender, name, data)
+
                 conn.close()
             except Exception as e:
                 print(f"[{name}] (Vai tro Client) Loi listener: {e}")
-    def save_message(peer_name, msg):
-        """Lưu tin nhắn nhận được vào file JSON"""
-        file_path = os.path.join("db", f"{peer_name}_messages.json")
-        os.makedirs("db", exist_ok=True)
-        messages = []
+    def save_message_global(sender, receiver, msg):
+        # """Lưu tin nhắn vào file db/chat_log.json"""
+        db_dir = "db"
+        os.makedirs(db_dir, exist_ok=True)
+        file_path = os.path.join(db_dir, "chat_log.json")
+
+        data = []
         if os.path.exists(file_path):
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
-                    messages = json.load(f)
+                    data = json.load(f)
             except Exception:
-                messages = []
-        messages.append({
+                data = []
+
+        data.append({
             "timestamp": time.strftime("%H:%M:%S"),
+            "from": sender,
+            "to": receiver,
             "content": msg
         })
+
         with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(messages, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
 
     # Chạy luồng listener
     t = threading.Thread(target=listener, daemon=True)

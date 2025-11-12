@@ -28,28 +28,39 @@ def start_peer(name, port):
                 data = conn.recv(1024).decode()
                 if data:
                     print(f"[{name}] (Vai tro Client) Nhan duoc tin: {data}")
-                    save_message(name, data)
+                    # Tự động tách tên người gửi nếu có cú pháp [Private] sender:
+                    sender = "unknown"
+                    if ":" in data:
+                        sender = data.split(":")[0].split()[-1]
+                    save_message_global(sender, name, data)
+
                 conn.close()
             except Exception as e:
                 print(f"[{name}] (Vai tro Server) Loi listener: {e}")
     
-    def save_message(peer_name, msg):
-        """Lưu tin nhắn nhận được vào file JSON"""
-        file_path = os.path.join("db", f"{peer_name}_messages.json")
-        os.makedirs("db", exist_ok=True)
-        messages = []
+    def save_message_global(sender, receiver, msg):
+        # """Lưu tin nhắn vào file db/chat_log.json"""
+        db_dir = "db"
+        os.makedirs(db_dir, exist_ok=True)
+        file_path = os.path.join(db_dir, "chat_log.json")
+
+        data = []
         if os.path.exists(file_path):
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
-                    messages = json.load(f)
+                    data = json.load(f)
             except Exception:
-                messages = []
-        messages.append({
+                data = []
+
+        data.append({
             "timestamp": time.strftime("%H:%M:%S"),
+            "from": sender,
+            "to": receiver,
             "content": msg
         })
+
         with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(messages, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
     # Chạy luồng listener
     t = threading.Thread(target=listener, daemon=True)
     t.start()
@@ -75,19 +86,19 @@ def start_peer(name, port):
     except requests.exceptions.JSONDecodeError:
         print(f"[{name}] (Vai tro Client) LOI khi lay list: Server tra ve non-JSON: {r_get.text[:100]}...")
 
-    # --- AUTO CONNECT ---
-    try:
-        data = r_get.json()
-        peer_list = data.get("list", [])
-        print(f"[{name}] (Auto-connect) Dang tim cac peer khac de ket noi...")
-        for peer in peer_list:
-            peer_name_other = peer.get("user")
-            if peer_name_other and peer_name_other != name:
-                payload = {"from_user": name, "to_peer": peer_name_other}
-                resp = requests.post(f"{TRACKER_URL}/connect-peer", json=payload)
-                print(f"[{name}] (Auto-connect) Phat hien peer moi '{peer_name_other}', da ket noi: {resp.text}")
-    except Exception as e:
-        print(f"[{name}] (Auto-connect) Loi: {e}")
+    # # --- AUTO CONNECT ---
+    # try:
+    #     data = r_get.json()
+    #     peer_list = data.get("list", [])
+    #     print(f"[{name}] (Auto-connect) Dang tim cac peer khac de ket noi...")
+    #     for peer in peer_list:
+    #         peer_name_other = peer.get("user")
+    #         if peer_name_other and peer_name_other != name:
+    #             payload = {"from_user": name, "to_peer": peer_name_other}
+    #             resp = requests.post(f"{TRACKER_URL}/connect-peer", json=payload)
+    #             print(f"[{name}] (Auto-connect) Phat hien peer moi '{peer_name_other}', da ket noi: {resp.text}")
+    # except Exception as e:
+    #     print(f"[{name}] (Auto-connect) Loi: {e}")
 
 
 
@@ -139,5 +150,5 @@ else:
 # Main
 # =========================
 if __name__ == "__main__":
-    print("--- Khoi chay PEER 'app3' ---")
-    start_peer(name="app3", port=9003)
+    print("--- Khoi chay PEER 'app2' ---")
+    start_peer(name="app2", port=9002)
