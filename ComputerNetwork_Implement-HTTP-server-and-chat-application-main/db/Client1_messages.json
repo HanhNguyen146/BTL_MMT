@@ -1,32 +1,3 @@
 [
-  {
-    "timestamp": "2025-11-13 16:50:24",
-    "direction": "send",
-    "content": "Broadcasted: hi all 23"
-  },
-  {
-    "timestamp": "2025-11-13 16:52:01",
-    "direction": "send",
-    "content": "Broadcasted: hi 23"
-  },
-  {
-    "timestamp": "2025-11-13 16:53:05",
-    "direction": "send",
-    "content": "To Client2: hello2"
-  },
-  {
-    "timestamp": "2025-11-13 16:53:18",
-    "direction": "send",
-    "content": "To Client3: hello3"
-  },
-  {
-    "timestamp": "2025-11-13 16:54:01",
-    "direction": "send",
-    "content": "Broadcasted: chao off23"
-  },
-  {
-    "timestamp": "2025-11-13 16:54:35",
-    "direction": "send",
-    "content": "To Client2: chao2 off"
-  }
+  
 ]

@@ -1,22 +1,3 @@
 [
-  {
-    "timestamp": "2025-11-13 16:52:01",
-    "direction": "recv",
-    "content": "From Client1 (broadcast): hi 23"
-  },
-  {
-    "timestamp": "2025-11-13 16:53:18",
-    "direction": "recv",
-    "content": "From Client1: hello3"
-  },
-  {
-    "timestamp": "2025-11-13 16:53:37",
-    "direction": "send",
-    "content": "To Client2: hello2 tu 3"
-  },
-  {
-    "timestamp": "2025-11-13 16:54:01",
-    "direction": "recv",
-    "content": "From Client1 (broadcast): chao off23"
-  }
+  
 ]
