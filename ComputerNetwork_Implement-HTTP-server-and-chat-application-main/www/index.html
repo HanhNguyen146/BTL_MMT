@@ -168,7 +168,11 @@ button:hover { background-color: #218838; }
     </div>
 
     <div class="main-chat">
-        <h3>Broadcast Channel</h3>
+        <h3>
+        Broadcast Channel 
+        <button id="broadcast-mode-btn" style="margin-left:10px; background:#dc3545;">Broadcast Mode</button>
+        </h3>
+
         <div id="chat-box"></div>
 
         <h3 style="margin-top:15px;">Private Chat: 
@@ -276,12 +280,13 @@ async function refreshData() {
             let uniqueUsers = new Set();
             
             data.list.forEach(entry => {
-                // Chỉ hiển thị tin nhắn (item khác ONLINE)
-                if (entry.item !== "ONLINE") { 
-                    appendMessage(chatBox, entry.user, entry.item);
-                }
-                uniqueUsers.add(entry.user);
+                const name = entry.peer;       // tên peer từ backend
+                const status = entry.status;   // ONLINE
+
+                appendMessage(chatBox, name, status);
+                uniqueUsers.add(name);
             });
+
             lastMessageCount = data.list.length; 
             
             // 2. CẬP NHẬT PEER LIST VÀ USERS
@@ -300,7 +305,7 @@ async function refreshData() {
                     
                     // --- (MỚI) Nút xem log ---
                     const logBtn = document.createElement("button");
-                    logBtn.textContent = "Log"; 
+                    logBtn.textContent = "My Log"; 
                     logBtn.className = "chat-action-btn";
                     logBtn.style.backgroundColor = "#6c757d";
                     logBtn.onclick = () => loadChatLog(user);
@@ -396,95 +401,90 @@ async function sendMessage() {
 // --- (MỚI) Hàm hiển thị lịch sử tin nhắn của peer ---
 async function loadChatLog(peerName) {
     try {
-        // --- Gửi request lấy log của peer được chọn ---
+        const self = clientInfo.user;
+        if (!self) {
+            alert("Bạn cần đăng ký trước!");
+            return;
+        }
+
+        // Luôn load log của CHÍNH MÌNH
         const response = await fetch("/get-chat-log", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ peer: peerName })
+            body: JSON.stringify({ peer: self })
         });
+
         const data = await response.json();
+        const messages = Array.isArray(data.messages) ? data.messages : [];
 
         const chatArea = document.getElementById("private-chat-area");
         chatArea.innerHTML = "";
 
-        if (!data.messages || data.messages.length === 0) {
-            chatArea.innerHTML = `<i>Không tìm thấy tin nhắn giữa ${clientInfo.user} và ${peerName}</i>`;
+        // Lọc đúng theo từng cặp self ↔ peerName
+        const filtered = messages.filter(msg => {
+            const content = msg.content || "";
+            const dir = msg.direction;
+
+            // -------------------------
+            // 1) PRIVATE MESSAGE
+            // -------------------------
+            if (dir === "send" && content.includes(`To ${peerName}`)) return true;
+            if (dir === "recv" && content.includes(`From ${peerName}`)) return true;
+
+            // -------------------------
+            // 2) BROADCAST SENT BY SELF
+            // msg:  Broadcasted: ...
+            // -------------------------
+            if (dir === "send" && content.startsWith("Broadcasted:"))
+                return true;
+
+            // -------------------------
+            // 3) BROADCAST SENT BY peerName
+            // msg:  From ClientX (broadcast): ...
+            // -------------------------
+            if (dir === "recv" && content.startsWith(`From ${peerName} (broadcast)`))
+                return true;
+
+            // -------------------------
+            // 4) Loại bỏ broadcast từ client khác
+            // -------------------------
+            return false;
+        });
+
+        // Không có tin giữa 2 peer?
+        if (filtered.length === 0) {
+            chatArea.innerHTML =
+                `<i>Không có tin nhắn giữa ${self} và ${peerName}</i>`;
             return;
         }
 
-        // ✅ Lọc chỉ những tin có liên quan đến mình, peer hoặc broadcast
-        const filtered = data.messages.filter(msg => {
-            const content = msg.content || "";
-            return (
-                content.includes(clientInfo.user) ||
-                content.includes(peerName) ||
-                content.includes("(broadcast)")
-            );
-        });
-
-        // --- Hiển thị tin nhắn ---
+        // Hiển thị log
         filtered.forEach(msg => {
             const div = document.createElement("div");
             div.style.padding = "6px";
-            div.style.marginBottom = "4px";
+            div.style.marginBottom = "6px";
             div.style.borderRadius = "6px";
             div.style.fontFamily = "monospace";
-            div.style.textAlign = "left";
 
-            const content = msg.content || "";
-            let role = msg.direction; // mặc định
+            div.style.background = (msg.direction === "recv")
+                ? "#d1e7dd"
+                : "#f8d7da";
 
-            // === Phân loại vai trò (SEND / RECV) theo góc nhìn của chính mình ===
-            if (content.includes("(broadcast)")) {
-                // Broadcast: nếu dòng có "Broadcasted:" -> mình gửi, nếu "From" -> mình nhận
-                if (content.includes("Broadcasted:")) role = "send";
-                else if (content.includes("From")) role = "recv";
-            } 
-            else if (content.includes(`To ${peerName}`) && msg.direction === "send") {
-                // mình gửi riêng cho peer kia
-                role = "send";
-            } 
-            else if (content.includes(`From ${peerName}`) && msg.direction === "recv") {
-                // mình nhận từ peer kia
-                role = "recv";
-            } 
-            else if (content.includes(`To ${clientInfo.user}`)) {
-                // peer gửi riêng cho mình
-                role = "recv";
-            } 
-            else if (content.includes(`From ${clientInfo.user}`)) {
-                // mình gửi riêng (trường hợp mình đang xem log chính mình)
-                role = "send";
-            }
-
-            // === Gán màu theo role ===
-            if (role === "recv") {
-                div.style.background = "#d1e7dd"; // xanh nhạt
-            } else if (role === "send") {
-                div.style.background = "#f8d7da"; // đỏ nhạt
-            } else {
-                div.style.background = "#e2e3e5";
-            }
-
-            // === Hiển thị nội dung ===
-            div.innerHTML = `<b>[${role.toUpperCase()}]</b> ${msg.content}
+            div.innerHTML = `<b>[${msg.direction.toUpperCase()}]</b> ${msg.content}
                              <span style="font-size:10px;color:gray">(${msg.timestamp})</span>`;
             chatArea.appendChild(div);
-            chatArea.appendChild(document.createElement("br"));
         });
 
-        // --- SYSTEM message ---
-        const systemLabel =
-            clientInfo.user === peerName
-                ? `Hiển thị lịch sử tin nhắn của chính bạn (${clientInfo.user})`
-                : `Hiển thị lịch sử tin nhắn giữa ${clientInfo.user} và ${peerName}`;
-        appendMessage(chatArea, "SYSTEM", systemLabel);
+        appendMessage(chatArea, "SYSTEM",
+            `Hiển thị lịch sử tin nhắn giữa ${self} và ${peerName}`);
 
     } catch (err) {
         console.error(err);
-        alert("Lỗi khi tải lịch sử tin nhắn!");
+        alert("Lỗi khi tải log!");
     }
 }
+
+
 // --- (MỚI) Hàm Connect thủ công giữa 2 peer ---
 async function connectToPeer(peerName) {
     if (!clientInfo.user) {
@@ -515,12 +515,21 @@ async function connectToPeer(peerName) {
         alert("Không thể kết nối đến backend!");
     }
 }
+// --- QUAY LẠI CHẾ ĐỘ BROADCAST ---
+function enableBroadcastMode() {
+    currentPrivatePeer = null;
+    currentPeerNameEl.textContent = "(None)";
+
+    privateChatArea.innerHTML = "";
+    appendMessage(privateChatArea, "SYSTEM", "Đã chuyển về chế độ Broadcast.");
+}
 
 
 // --- Event listeners ---
 registerBtn.addEventListener("click", addSelfToList);
 sendMessageBtn.addEventListener("click", sendMessage);
 refreshPeersBtn.addEventListener("click", refreshPeers); // Giờ hàm này đã tồn tại
+document.getElementById("broadcast-mode-btn").addEventListener("click", enableBroadcastMode);
 
 // Tắt Enter mặc định và dùng Enter để gửi
 messageInput.addEventListener("keypress", (e) => {

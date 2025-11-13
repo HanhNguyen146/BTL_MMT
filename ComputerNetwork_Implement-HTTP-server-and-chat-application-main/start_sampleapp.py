@@ -287,9 +287,27 @@ def broadcast(body):
         print(f"[SampleApp] Broadcast from {sender}: {msg}")
         success = []
 
-        for name, (ip, port) in PEERS_CACHE.items():
-           
-            if name.strip().lower() == str(sender).strip().lower():
+        # --- CHỈ LẤY CÁC PEER ĐÃ CONNECT TỪ peer_connections.json ---
+        connections_file = os.path.join("db", "peer_connections.json")
+        if not os.path.exists(connections_file):
+            return {"error": "peer_connections.json not found"}
+
+        with open(connections_file, "r", encoding="utf-8") as f:
+            connections = json.load(f)
+
+        # Danh sách kết nối của người gửi
+        sender_conn = connections.get(sender, [])
+
+        # Loại bỏ chính nó
+        sender_conn = [p for p in sender_conn if p.get("peer") != sender]
+
+        for entry in sender_conn:
+            target_peer = entry.get("peer")
+            ip = entry.get("ip")
+            port = entry.get("port")
+
+            if not ip or not port:
+                print(f"[WARN] Missing ip/port for {target_peer}")
                 continue
 
             try:
@@ -297,17 +315,20 @@ def broadcast(body):
                 s.connect((ip, int(port)))
                 s.sendall(f"[Broadcast from {sender}] {msg}".encode("utf-8"))
                 s.close()
-                success.append(name)
 
-                # chỉ người nhận mới log RECV
-                save_peer_message(name, f"From {sender} (broadcast): {msg}", "recv")
+                success.append(target_peer)
+
+                # Log RECV
+                save_peer_message(target_peer, f"From {sender} (broadcast): {msg}", "recv")
+
             except Exception as e:
-                print(f"[WARN] Broadcast error {name}: {e}")
+                print(f"[WARN] Broadcast error {target_peer}: {e}")
 
-        # người gửi CHỈ log SEND 1 dòng
+        # Log SEND
         save_peer_message(sender, f"Broadcasted: {msg}", "send")
 
         return {"status": "ok", "sent_to": success}
+
     except Exception as e:
         return {"error": str(e)}
 
