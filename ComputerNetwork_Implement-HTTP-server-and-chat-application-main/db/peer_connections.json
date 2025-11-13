@@ -1,3 +1,46 @@
 {
-    
+    "Client3": [
+        {
+            "peer": "Client3",
+            "ip": "127.0.0.1",
+            "port": 9003,
+            "status": "ONLINE"
+        },
+        {
+            "peer": "Client1",
+            "ip": "127.0.0.1",
+            "port": 9001
+        }
+    ],
+    "Client2": [
+        {
+            "peer": "Client2",
+            "ip": "127.0.0.1",
+            "port": 9002,
+            "status": "ONLINE"
+        },
+        {
+            "peer": "Client1",
+            "ip": "127.0.0.1",
+            "port": 9001
+        }
+    ],
+    "Client1": [
+        {
+            "peer": "Client1",
+            "ip": "127.0.0.1",
+            "port": 9001,
+            "status": "ONLINE"
+        },
+        {
+            "peer": "Client2",
+            "ip": "127.0.0.1",
+            "port": 9002
+        },
+        {
+            "peer": "Client3",
+            "ip": "127.0.0.1",
+            "port": 9003
+        }
+    ]
 }

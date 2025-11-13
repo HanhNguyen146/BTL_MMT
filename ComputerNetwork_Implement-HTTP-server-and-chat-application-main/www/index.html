@@ -280,12 +280,13 @@ async function refreshData() {
             let uniqueUsers = new Set();
             
             data.list.forEach(entry => {
-                const name = entry.peer;       // tên peer từ backend
-                const status = entry.status;   // ONLINE
+                const name = entry.peer || entry.user;  // fallback nếu vẫn còn kiểu cũ
+                const status = entry.status || entry.item || "ONLINE";
 
                 appendMessage(chatBox, name, status);
-                uniqueUsers.add(name);
+                if (name) uniqueUsers.add(name);
             });
+
 
             lastMessageCount = data.list.length; 
             

@@ -144,8 +144,8 @@ class Request():
         #  TODO: implement the cookie function here
         #        by parsing the header            #
 
-        if DEBUG:
-            print(f"[Request] Raw cookie header: '{cookies}'")
+        # if DEBUG:
+        #     print(f"[Request] Raw cookie header: '{cookies}'")
         
         if cookies:
             cookie_dict = {}
@@ -155,8 +155,8 @@ class Request():
                 if '=' in pair:
                     k, v = pair.split('=', 1)
                     cookie_dict[k.strip()] = v.strip()
-            if DEBUG:
-                print(f"[Request] Parsed cookies: {cookie_dict}")
+            #if DEBUG:
+                #print(f"[Request] Parsed cookies: {cookie_dict}")
             self.cookies = cookie_dict
         else:
             if DEBUG:

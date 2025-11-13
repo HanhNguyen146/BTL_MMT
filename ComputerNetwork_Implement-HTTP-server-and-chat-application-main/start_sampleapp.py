@@ -37,7 +37,7 @@ PORT = 8000  # Default port
 app = WeApRous()
 
 # --- Cấu hình ---
-BACKEND_URL = "http://127.0.0.1:9000"  # proxy sẽ trỏ backend.local -> 127.0.0.1:9000
+BACKEND_URL = "http://127.0.0.1:8080"  # proxy sẽ trỏ backend.local -> 127.0.0.1:9000
 WWW_DIR = os.path.join(os.path.dirname(__file__), "www")
 PEERS_CACHE_FILE = os.path.join("db", "peers_cache.json") 
 LOG_FILE = os.path.join("db", "chat_log.json")

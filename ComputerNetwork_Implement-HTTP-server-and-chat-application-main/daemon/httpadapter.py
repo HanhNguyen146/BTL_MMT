@@ -192,7 +192,7 @@ class HttpAdapter:
                         auth_val = req.cookies.get("auth", "")
                         if isinstance(auth_val, str):
                             auth_val = auth_val.lower()
-                    print(f"[HttpAdapter] GET / auth_val: '{auth_val}'")
+                    #print(f"[HttpAdapter] GET / auth_val: '{auth_val}'")
                 except Exception as e:
                     import traceback
                     print(f"[HttpAdapter] Error reading cookies: {e}")
@@ -261,7 +261,7 @@ class HttpAdapter:
         # ==========================================================
         # BƯỚC 2: LOGIC DỰ PHÒNG (Cho Backend 9000 - nếu không phải WeApRous)
         # ==========================================================
-        print(f"[HttpAdapter] No WeApRous route found. Falling back to hardcoded logic for {req.method} {req.path}...")
+        #print(f"[HttpAdapter] No WeApRous route found. Falling back to hardcoded logic for {req.method} {req.path}...")
 
         if req.method == "GET" and req.path == "/login":
             try:
@@ -366,7 +366,7 @@ class HttpAdapter:
             auth_val = ""
             try:
                 # Debug: in ra cookies nhận được
-                print(f"[HttpAdapter] GET / cookies: {req.cookies}")
+                #print(f"[HttpAdapter] GET / cookies: {req.cookies}")
                 auth_val = req.cookies.get("auth", "")
                 if isinstance(auth_val, str):
                     auth_val = auth_val.lower()
