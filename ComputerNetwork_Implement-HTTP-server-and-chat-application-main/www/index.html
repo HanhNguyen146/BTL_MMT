@@ -305,7 +305,7 @@ async function refreshData() {
                     
                     // --- (MỚI) Nút xem log ---
                     const logBtn = document.createElement("button");
-                    logBtn.textContent = "My Log"; 
+                    logBtn.textContent = "Log"; 
                     logBtn.className = "chat-action-btn";
                     logBtn.style.backgroundColor = "#6c757d";
                     logBtn.onclick = () => loadChatLog(user);
@@ -504,14 +504,14 @@ async function connectToPeer(peerName) {
 
         const data = await response.json();
         if (response.ok) {
-            log(`✅ Connected to ${peerName}: ${JSON.stringify(data)}`);
-            alert(`✅ Kết nối thành công với ${peerName}`);
+            log(` Connected to ${peerName}: ${JSON.stringify(data)}`);
+            alert(` Kết nối thành công với ${peerName}`);
         } else {
-            log(`❌ Connect failed: ${data.error || response.statusText}`);
-            alert(`❌ Lỗi khi kết nối: ${data.error || response.statusText}`);
+            log(` Connect failed: ${data.error || response.statusText}`);
+            alert(` Lỗi khi kết nối: ${data.error || response.statusText}`);
         }
     } catch (e) {
-        log(`❌ Connect request error: ${e}`);
+        log(` Connect request error: ${e}`);
         alert("Không thể kết nối đến backend!");
     }
 }
