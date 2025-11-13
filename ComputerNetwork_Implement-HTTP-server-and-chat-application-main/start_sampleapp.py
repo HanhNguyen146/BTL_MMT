@@ -109,17 +109,39 @@ def serve_file(filename):
 def home(_):
     print("HELLLOOOOOOOOOOOOOOOOOOOO")
     try:
-        r = requests.get(f"{BACKEND_URL}/", timeout=3)
+        # Lấy cookie từ request để forward đến backend
+        import threading
+        req = getattr(threading.current_thread(), 'request_obj', None)
+        cookies_to_forward = {}
+        if req and req.cookies:
+            # Forward cookie auth nếu có
+            if 'auth' in req.cookies:
+                cookies_to_forward['auth'] = req.cookies['auth']
+                print(f"[SampleApp] Forwarding cookie to backend: {cookies_to_forward}")
+            else:
+                print(f"[SampleApp] No 'auth' cookie in request. Available cookies: {req.cookies}")
+        else:
+            print(f"[SampleApp] No request object or cookies found. req={req}")
+        
+        # Forward cookie khi gọi backend
+        print(f"[SampleApp] Calling backend {BACKEND_URL}/ with cookies: {cookies_to_forward}")
+        r = requests.get(f"{BACKEND_URL}/", cookies=cookies_to_forward, timeout=3)
+        print(f"[SampleApp] Backend response status: {r.status_code}")
+        # Đảm bảo encoding UTF-8
+        r.encoding = 'utf-8'
         # Trả về nội dung HTML thô
         return r.text 
     except Exception as e:
         print(f"[SampleApp] Lỗi GET /: {e}")
+        import traceback
+        print(f"[SampleApp] Traceback: {traceback.format_exc()}")
         return f"<h1>503 Service Unavailable</h1><p>Không thể kết nối đến Proxy (8080).</p>"
 
 @app.route("/login", methods=["GET"])
 def login_page(_):
     try:
         r = requests.get(f"{BACKEND_URL}/login", timeout=3)
+        r.encoding = 'utf-8'
         return r.text
     except Exception as e:
         print(f"[SampleApp] Lỗi GET /login: {e}")
@@ -129,6 +151,7 @@ def login_page(_):
 def submit_info_page(_):
     try:
         r = requests.get(f"{BACKEND_URL}/submit-info", timeout=3)
+        r.encoding = 'utf-8'
         return r.text
     except Exception as e:
         print(f"[SampleApp] Lỗi GET /submit-info: {e}")
