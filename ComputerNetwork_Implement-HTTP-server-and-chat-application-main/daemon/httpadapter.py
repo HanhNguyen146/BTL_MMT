@@ -146,6 +146,19 @@ class HttpAdapter:
             print(f"[HttpAdapter] recv bytes={len(msg)} header_end={raw_req.find('\\r\\n\\r\\n')}")
 
         req.prepare(raw_req, routes)
+        
+        # Debug: in ra cookie header từ raw request nếu là GET /
+        if req.method == "GET" and req.path in ("/", "/index", "/index.html"):
+            # Tìm cookie trong raw request
+            cookie_line = None
+            for line in raw_req.split('\r\n'):
+                if line.lower().startswith('cookie:'):
+                    cookie_line = line
+                    break
+            if cookie_line:
+                print(f"[HttpAdapter] Raw Cookie header from request: {cookie_line}")
+            else:
+                print(f"[HttpAdapter] No Cookie header found in raw request")
 
         if req.path == "/favicon.ico":
             print("[HttpAdapter] Handling /favicon.ico request (204 No Content)")
@@ -161,6 +174,43 @@ class HttpAdapter:
         
         if handler:
             print(f"[HttpAdapter] Found WeApRous route: {handler.__name__} for {req.method} {req.path}")
+            
+            # Kiểm tra authentication cho các route cần đăng nhập
+            if req.method == "GET" and req.path in ("/", "/index", "/index.html"):
+                # Debug: in ra raw request headers để kiểm tra cookie
+                print(f"[HttpAdapter] GET / - Raw request headers:")
+                if req.headers:
+                    for key, value in req.headers.items():
+                        if 'cookie' in key.lower():
+                            print(f"  {key}: {value}")
+                
+                auth_val = ""
+                try:
+                    print(f"[HttpAdapter] GET / cookies dict: {req.cookies}")
+                    print(f"[HttpAdapter] GET / cookies type: {type(req.cookies)}")
+                    if req.cookies:
+                        auth_val = req.cookies.get("auth", "")
+                        if isinstance(auth_val, str):
+                            auth_val = auth_val.lower()
+                    print(f"[HttpAdapter] GET / auth_val: '{auth_val}'")
+                except Exception as e:
+                    import traceback
+                    print(f"[HttpAdapter] Error reading cookies: {e}")
+                    print(f"[HttpAdapter] Traceback: {traceback.format_exc()}")
+                    auth_val = ""
+                
+                if auth_val != "true":
+                    # Chưa đăng nhập, trả về 401
+                    body = "<h1>401 Unauthorized</h1><p>Login required. <a href=\"/login\">Login</a></p>"
+                    headers = ("HTTP/1.1 401 Unauthorized\r\n"
+                               "Content-Type: text/html; charset=utf-8\r\n"
+                               "Content-Length: {}\r\n"
+                               "Connection: close\r\n"
+                               "\r\n").format(len(body))
+                    conn.sendall(headers.encode() + body.encode())
+                    conn.close()
+                    return
+            
             try:
                 # Lấy body cho POST/PUT
                 body = ""
@@ -179,6 +229,11 @@ class HttpAdapter:
                 
                 # *** GỌI HÀM CỦA BẠN (VÍ DỤ: home(), login_page(), add_list()) ***
                 # Logic (ví dụ: print("HELLLOO...")) của bạn sẽ chạy ở đây
+                # Truyền request object vào handler nếu handler cần cookie
+                # Tạm thời lưu req vào handler context để có thể truy cập
+                import threading
+                threading.current_thread().request_obj = req
+                print(f"[HttpAdapter] Saved request object to thread. Cookies: {req.cookies if req.cookies else 'None'}")
                 result = handler(body) 
 
                 # Xử lý kết quả trả về (HTML hoặc JSON)
@@ -198,7 +253,7 @@ class HttpAdapter:
                 # Xử lý lỗi nếu hàm handler (ví dụ: home()) của bạn bị lỗi
                 print(f"[HttpAdapter] Error executing WeApRous handler {handler.__name__}: {e}")
                 err_msg = f"<h1>500 Internal Server Error</h1><p>Handler Error: {e}</p>"
-                headers = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: {len(err_msg)}\r\nConnection: close\r\n\r\n"
+                headers = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {len(err_msg)}\r\nConnection: close\r\n\r\n"
                 conn.sendall(headers.encode() + err_msg.encode())
                 conn.close()
                 return
@@ -212,8 +267,8 @@ class HttpAdapter:
             try:
                 with open(os.path.join("www", "login.html"), "r", encoding="utf-8") as fh:
                     body = fh.read()
-                headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
-                conn.sendall(headers.encode() + body.encode())
+                headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+                conn.sendall(headers.encode() + body.encode('utf-8'))
             except Exception as e:
                 body = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
                 conn.sendall(b"HTTP/1.1 500 Internal Server Error\r\n\r\n" + body.encode())
@@ -281,8 +336,8 @@ class HttpAdapter:
                     with open(os.path.join("www", "index.html"), "r", encoding="utf-8") as fh:
                         body = fh.read()
                     headers = ("HTTP/1.1 200 OK\r\n"
-                               "Content-Type: text/html\r\n"
-                               "Set-Cookie: auth=true; Path=/; HttpOnly\r\n"
+                               "Content-Type: text/html; charset=utf-8\r\n"
+                               "Set-Cookie: auth=true; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600\r\n"
                                "\r\n")
                     conn.sendall(headers.encode() + body.encode())
                 except Exception as e:
@@ -303,17 +358,21 @@ class HttpAdapter:
             return
 
         if req.method == "GET" and req.path == "/protected":
-            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Protected Resource</h1><p>You are logged in!</p>")
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<h1>Protected Resource</h1><p>You are logged in!</p>")
             conn.close()
             return
 
         if req.method == "GET" and req.path in ("/", "/index", "/index.html"):
             auth_val = ""
             try:
+                # Debug: in ra cookies nhận được
+                print(f"[HttpAdapter] GET / cookies: {req.cookies}")
                 auth_val = req.cookies.get("auth", "")
                 if isinstance(auth_val, str):
                     auth_val = auth_val.lower()
-            except Exception:
+                print(f"[HttpAdapter] GET / auth_val: '{auth_val}'")
+            except Exception as e:
+                print(f"[HttpAdapter] Error reading cookies: {e}")
                 auth_val = ""
 
             if auth_val == "true":
@@ -330,7 +389,7 @@ class HttpAdapter:
             else:
                 body = "<h1>401 Unauthorized</h1><p>Login required. <a href=\"/login\">Login</a></p>"
                 headers = ("HTTP/1.1 401 Unauthorized\r\n"
-                           "Content-Type: text/html\r\n"
+                           "Content-Type: text/html; charset=utf-8\r\n"
                            "Content-Length: {}\r\n"
                            "Connection: close\r\n"
                            "\r\n").format(len(body))
@@ -341,8 +400,8 @@ class HttpAdapter:
             try:
                 with open(os.path.join("www", "submit-info.html"), "r", encoding="utf-8") as fh:
                     body = fh.read()
-                headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
-                conn.sendall(headers.encode() + body.encode())
+                headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+                conn.sendall(headers.encode() + body.encode('utf-8'))
             except Exception as e:
                 body = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
                 conn.sendall(b"HTTP/1.1 500 Internal Server Error\r\n\r\n" + body.encode())
@@ -386,7 +445,7 @@ class HttpAdapter:
             if not username or not password:
                 body = "<h1>400 Bad Request</h1><p>Missing username or password.</p>"
                 headers = ("HTTP/1.1 400 Bad Request\r\n"
-                        "Content-Type: text/html\r\n"
+                        "Content-Type: text/html; charset=utf-8\r\n"
                         "Content-Length: {}\r\n"
                         "Connection: close\r\n\r\n").format(len(body))
                 conn.sendall(headers.encode() + body.encode())
@@ -410,7 +469,7 @@ class HttpAdapter:
             if username in users:
                 body = f"<h1>409 Conflict</h1><p>Username '{username}' already exists.</p>"
                 headers = ("HTTP/1.1 409 Conflict\r\n"
-                        "Content-Type: text/html\r\n"
+                        "Content-Type: text/html; charset=utf-8\r\n"
                         "Content-Length: {}\r\n"
                         "Connection: close\r\n\r\n").format(len(body))
                 conn.sendall(headers.encode() + body.encode())
@@ -433,8 +492,8 @@ class HttpAdapter:
                 with open(os.path.join("www", "index.html"), "r", encoding="utf-8") as fh:
                     body = fh.read()
                     headers = ("HTTP/1.1 200 OK\r\n"
-                               "Content-Type: text/html\r\n"
-                               "Set-Cookie: auth=true; Path=/; HttpOnly\r\n"
+                               "Content-Type: text/html; charset=utf-8\r\n"
+                               "Set-Cookie: auth=true; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600\r\n"
                                "\r\n")
                     conn.sendall(headers.encode() + body.encode())
             except Exception as e:
@@ -517,7 +576,7 @@ class HttpAdapter:
                 err = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
                 conn.sendall(
                     f"HTTP/1.1 500 Internal Server Error\r\n"
-                    f"Content-Type: text/html\r\n"
+                    f"Content-Type: text/html; charset=utf-8\r\n"
                     f"Content-Length: {len(err)}\r\n"
                     f"Connection: close\r\n\r\n".encode() + err.encode()
                 )
@@ -548,7 +607,7 @@ class HttpAdapter:
                 conn.sendall(headers.encode() + body_resp.encode())
             except Exception as e:
                 body_bytes = f"<h1>500 Internal Server Error</h1><p>{e}</p>".encode()
-                headers = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: {len(body_bytes)}\r\nConnection: close\r\n\r\n"
+                headers = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {len(body_bytes)}\r\nConnection: close\r\n\r\n"
                 conn.sendall(headers.encode() + body_bytes)
             finally:
                 conn.close()
@@ -736,7 +795,7 @@ class HttpAdapter:
                 body = f"<h1>Broadcast sent</h1><p>Message delivered to {success} peers.</p>"
                 headers = (
                     "HTTP/1.1 200 OK\r\n"
-                    "Content-Type: text/html\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
                     f"Content-Length: {len(body)}\r\n"
                     "Connection: close\r\n\r\n"
                 )
@@ -748,7 +807,7 @@ class HttpAdapter:
                 err = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
                 conn.sendall(
                     f"HTTP/1.1 500 Internal Server Error\r\n"
-                    f"Content-Type: text/html\r\n"
+                    f"Content-Type: text/html; charset=utf-8\r\n"
                     f"Content-Length: {len(err)}\r\n"
                     f"Connection: close\r\n\r\n".encode() + err.encode()
                 )
@@ -818,7 +877,7 @@ class HttpAdapter:
 
                 body = f"<h1>Message sent</h1><p>{sender} → {target}</p>"
                 headers = ("HTTP/1.1 200 OK\r\n"
-                        "Content-Type: text/html\r\n"
+                        "Content-Type: text/html; charset=utf-8\r\n"
                         f"Content-Length: {len(body)}\r\n\r\n")
                 conn.sendall(headers.encode() + body.encode())
 
@@ -828,8 +887,8 @@ class HttpAdapter:
                 err = f"<h1>500 Internal Server Error</h1><p>{e}</p>"
                 conn.sendall(
                     f"HTTP/1.1 500 Internal Server Error\r\n"
-                    f"Content-Type: text/html\r\n"
-                    f"Content-Length: {len(err)}\r\n\r\n".encode() + err.encode()
+                    f"Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(err)}\r\n\r\n".encode() + err.encode('utf-8')
                 )
                
 
